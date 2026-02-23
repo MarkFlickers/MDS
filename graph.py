@@ -109,3 +109,38 @@ def plot_results(df_imu: pd.DataFrame, df_gnss_clean: pd.DataFrame, df_gnss_nois
 
     plt.tight_layout()
     plt.show()
+
+def plot_kf_comparison(df_true, df_meas, df_kf, sigma_a_label):
+    """Строит графики сравнения работы Фильтра Калмана."""
+    plt.style.use('bmh')
+    fig = plt.figure(figsize=(15, 5))
+    fig.suptitle(f"Фильтр Калмана (Шум процесса $\sigma_a$ = {sigma_a_label})", fontsize=16)
+
+    # 1. 3D Траектория
+    ax1 = fig.add_subplot(131, projection='3d')
+    ax1.plot(df_true['E'], df_true['N'], df_true['U'], 'k-', label='Истина')
+    ax1.scatter(df_meas['E'], df_meas['N'], df_meas['U'], c='r', s=10, alpha=0.3, label='ГНСС')
+    ax1.plot(df_kf['E'], df_kf['N'], df_kf['U'], 'b-', linewidth=2, label='ФК')
+    ax1.set_title("3D Траектория")
+    ax1.legend()
+
+    # 2. Проекция E-N (вид сверху)
+    ax2 = fig.add_subplot(132)
+    ax2.plot(df_true['E'], df_true['N'], 'k-', label='Истина')
+    ax2.scatter(df_meas['E'], df_meas['N'], c='r', s=10, alpha=0.3, label='ГНСС')
+    ax2.plot(df_kf['E'], df_kf['N'], 'b-', linewidth=2, label='ФК')
+    ax2.set_title("Проекция East-North")
+    ax2.set_xlabel("East, м"); ax2.set_ylabel("North, м")
+    ax2.legend()
+
+    # 3. Высота от времени
+    ax3 = fig.add_subplot(133)
+    ax3.plot(df_true['t'], df_true['U'], 'k-', label='Истина')
+    ax3.scatter(df_meas['t'], df_meas['U'], c='r', s=10, alpha=0.3, label='ГНСС')
+    ax3.plot(df_kf['t'], df_kf['U'], 'b-', linewidth=2, label='ФК')
+    ax3.set_title("Высота от времени")
+    ax3.set_xlabel("Время, с"); ax3.set_ylabel("Up, м")
+    ax3.legend()
+
+    plt.tight_layout()
+    plt.show()
