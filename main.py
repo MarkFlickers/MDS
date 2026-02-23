@@ -5,32 +5,31 @@ from graph import plot_results
 from dataclasses import asdict
 import json
 
+# 1. Инициализация конфигурации
 config = TrajectoryConfig()
 
+# 2. Интегрирование кинематики на частоте ИМУ
 print("Генерация ИМУ-траектории (Идеал)...")
 df_imu_clean = generate_trajectory(config, stages_scenario)
 
-# --- ЛР3: Генерируем зашумленные ИМУ данные ---
+# 3. Генерируем зашумленные ИМУ данные ---
 print("Генерация ошибок ИМУ (ЛР3)...")
 df_imu_noisy = simulate_imu_errors(df_imu_clean, config)
 
+# 4. Формирование ГНСС-измерений
 print("Генерация ГНСС-измерений (ЛР1)...")
 df_gnss_clean, df_gnss_noisy = process_gnss(df_imu_clean, config)
 
-# --- ЛР4: Генерируем сырые наблюдения ГНСС ---
+# 5. Генерируем сырые наблюдения ГНСС ---
 print("Генерация сырых ГНСС наблюдений (ЛР4)...")
 df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
 
-# Сохранение результатов
+# 6. Сохранение результатов
 df_imu_noisy.to_csv("output/trajectory_imu.csv", index=False) # Тут реалистичные измерения с шумом
 df_imu_clean.to_csv("output/trajectory_imu_ideal.csv", index=False) # Cохраняем идеал для отладки
-
-df_gnss_clean.to_csv("output/trajectory_gnss_true.csv", index=False)
-
-df_gnss_meas = df_gnss_noisy[['t', 'E', 'N', 'U', 'lat', 'lon', 'alt', 'X_ecef', 'Y_ecef', 'Z_ecef']]
+df_gnss_meas = df_gnss_noisy[['t', 'E', 'N', 'U', 'lat', 'lon', 'alt', 'X_ecef', 'Y_ecef', 'Z_ecef']] # Для фильтра Калмана ЛР1 оставляем только обязательные столбцы (позицию)
 df_gnss_meas.to_csv("output/gnss_measurements.csv", index=False)
-
-# Сохраняем сырые наблюдения (ЛР4)
+df_gnss_clean.to_csv("output/trajectory_gnss_true.csv", index=False)
 df_gnss_raw.to_csv("output/gnss_raw_observables.csv", index=False)
 
 meta = asdict(config)

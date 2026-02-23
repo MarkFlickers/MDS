@@ -8,8 +8,10 @@ from quaternion import euler_to_quat, quat_from_rotvec, quat_to_dcm, quat_to_eul
 # ИНТЕГРАТОР ТРАЕКТОРИИ (ИДЕАЛЬНОЙ)
 # ==========================================
 def generate_trajectory(cfg: TrajectoryConfig, stages: List[Stage]) -> pd.DataFrame:
+    """Интегрирует уравнения кинематики, генерирует истинную траекторию ИМУ и антенны."""
     dt = cfg.dt_imu
     
+    # Разворачиваем стадии в массивы
     a_cmd_list, w_dot_cmd_list = [], []
     for s in stages:
         n_steps = max(1, int(round(s.duration_s / dt)))
@@ -20,6 +22,7 @@ def generate_trajectory(cfg: TrajectoryConfig, stages: List[Stage]) -> pd.DataFr
     w_dot_arr = np.vstack(w_dot_cmd_list)
     total_steps = len(a_b_arr)
     
+    # Предвыделение памяти
     t_arr = np.arange(total_steps) * dt
     r_imu_enu = np.zeros((total_steps, 3))
     v_imu_enu = np.zeros((total_steps, 3))
@@ -30,30 +33,39 @@ def generate_trajectory(cfg: TrajectoryConfig, stages: List[Stage]) -> pd.DataFr
     w_b_hist = np.zeros((total_steps, 3))
     f_b_hist = np.zeros((total_steps, 3))
     
+    # Начальные состояния
     r_n = cfg.init_pos_enu.copy()
     v_b = cfg.init_vel_body.copy()
     w_b = np.array([0.0, 0.0, 0.0])
     q_nb = euler_to_quat(*cfg.init_euler)
     
+    # Вектор гравитации в ENU
     g_n = np.array([0.0, 0.0, -cfg.g])
     
     for k in range(total_steps):
         a_b = a_b_arr[k]
         w_dot = w_dot_arr[k]
         
+        # 1. Угловая кинематика
         w_b = w_b + w_dot * dt
         dq = quat_from_rotvec(w_b * dt)
         q_nb = quat_mul(q_nb, dq)
-        q_nb = q_nb / np.linalg.norm(q_nb)
+        q_nb = q_nb / np.linalg.norm(q_nb) # Нормализация
         C_nb = quat_to_dcm(q_nb)
         
+        # 2. Линейная кинематика
         v_b = v_b + a_b * dt
         v_n = C_nb @ v_b
         r_n = r_n + v_n * dt
         
+        # 3. Удельная сила (измерения акселерометра ИМУ)
+        # f^b = a^b - C_nb^T * g^n
         f_b = a_b - C_nb.T @ g_n
+
+        # 4. Позиция антенны ГНСС
         r_ant = r_n + C_nb @ cfg.lever_arm
         
+        # Сохранение истории
         r_imu_enu[k] = r_n
         v_imu_enu[k] = v_n
         r_ant_enu[k] = r_ant
@@ -62,6 +74,7 @@ def generate_trajectory(cfg: TrajectoryConfig, stages: List[Stage]) -> pd.DataFr
         w_b_hist[k] = w_b
         f_b_hist[k] = f_b
         
+    # Упаковка в DataFrame
     df = pd.DataFrame({
         't': t_arr,
         'E_imu': r_imu_enu[:, 0], 'N_imu': r_imu_enu[:, 1], 'U_imu': r_imu_enu[:, 2],

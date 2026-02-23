@@ -4,6 +4,7 @@ import numpy as np
 from typing import Tuple
 
 def quat_mul(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Умножение кватернионов (скаляр на первом месте: w, x, y, z)."""
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
     return np.array([
@@ -14,6 +15,7 @@ def quat_mul(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     ])
 
 def quat_from_rotvec(v: np.ndarray) -> np.ndarray:
+    """Кватернион из вектора поворота."""
     norm_v = np.linalg.norm(v)
     if norm_v < 1e-8:
         return np.array([1.0, 0.0, 0.0, 0.0])
@@ -25,6 +27,7 @@ def quat_from_rotvec(v: np.ndarray) -> np.ndarray:
                      v[2]/norm_v * sin_half])
 
 def quat_to_dcm(q: np.ndarray) -> np.ndarray:
+    """Матрица направляющих косинусов из кватерниона."""
     w, x, y, z = q
     return np.array([
         [1 - 2*y**2 - 2*z**2,     2*x*y - 2*w*z,         2*x*z + 2*w*y],
@@ -33,6 +36,7 @@ def quat_to_dcm(q: np.ndarray) -> np.ndarray:
     ])
 
 def euler_to_quat(roll: float, pitch: float, yaw: float) -> np.ndarray:
+    """Углы Эйлера (ZYX) в кватернион."""
     cy, sy = np.cos(yaw * 0.5), np.sin(yaw * 0.5)
     cp, sp = np.cos(pitch * 0.5), np.sin(pitch * 0.5)
     cr, sr = np.cos(roll * 0.5), np.sin(roll * 0.5)
@@ -44,6 +48,7 @@ def euler_to_quat(roll: float, pitch: float, yaw: float) -> np.ndarray:
     return np.array([w, x, y, z])
 
 def quat_to_euler(q: np.ndarray) -> Tuple[float, float, float]:
+    """Кватернион в углы Эйлера (roll, pitch, yaw)."""
     w, x, y, z = q
     roll = np.arctan2(2*(w*x + y*z), 1 - 2*(x**2 + y**2))
     pitch = np.arcsin(np.clip(2*(w*y - z*x), -1.0, 1.0))

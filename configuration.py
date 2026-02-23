@@ -13,25 +13,30 @@ class Stage:
 
 @dataclass
 class TrajectoryConfig:
-    dt_imu: float = 1/50
-    dt_gnss: float = 1.0
+    # Временная сетка
+    dt_imu: float = 1/50    # Шаг ИМУ (50 Гц)
+    dt_gnss: float = 1.0    # Шаг ГНСС (1 Гц)
     
+    # Генераторы случайных чисел (для воспроизводимости)
     seed_gnss: int = 42
     seed_imu: int = 42
     
-    ref_lat: float = 0.0
-    ref_lon: float = 0.0
-    ref_alt: float = 0.0
+    # Опорная точка (нейтральная, экватор/нулевой меридиан для простоты)
+    ref_lat: float = 0.0    # [рад]
+    ref_lon: float = 0.0    # [рад]
+    ref_alt: float = 0.0    # [м]
     
-    g: float = 9.81
-    gnss_pos_sigma: float = 3.0
-    
-    lever_arm: np.ndarray = field(default_factory=lambda: np.array([0.5, 0.0, 0.0]))
-    init_pos_enu: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))
-    init_vel_body: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))
-    init_euler: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))
+    # Физика и геометрия
+    g: float = 9.81                 # Ускорение свободного падения [м/с^2]
+    gnss_pos_sigma: float = 3.0     # СКО шума ГНСС [м]
+    lever_arm: np.ndarray = field(default_factory=lambda: np.array([0.5, 0.0, 0.0]))    # Вынос ИМУ -> Антенна ГНСС в ССК [м]
 
-    # --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ ЛР3 (Модели ошибок ИМУ) ---
+    # Начальные условия
+    init_pos_enu: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))     # [E, N, U]
+    init_vel_body: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))    # Скорость в ССК
+    init_euler: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))       # [roll, pitch, yaw] в радианах
+
+    # --- Модели ошибок ИМУ ---
     # Акселерометр
     accel_bias: np.ndarray = field(default_factory=lambda: np.array([0.02, -0.015, 0.03])) # м/с^2
     accel_vrw: float = 0.001  # Velocity Random Walk (м/с / sqrt(с))
@@ -39,7 +44,7 @@ class TrajectoryConfig:
     gyro_bias: np.ndarray = field(default_factory=lambda: np.array([0.001, -0.002, 0.0015])) # рад/с
     gyro_arw: float = 0.0001 # Angular Random Walk (рад / sqrt(с))
     
-    # --- НОВЫЕ ПАРАМЕТРЫ ДЛЯ ЛР4 (Сырые наблюдения ГНСС) ---
+    # --- Сырые наблюдения ГНСС ---
     # Модель часов приемника
     clock_bias_init: float = 1e-4      # Секунды (ок. 30 км ошибки дальности)
     clock_drift_init: float = 1e-7     # Сек/сек (ок. 30 м/с ошибки доплера)
@@ -52,6 +57,7 @@ class TrajectoryConfig:
 
 ZERO_A = np.array([0.0, 0.0, 0.0])
 
+# Сценарий движения
 stages_scenario = [
     Stage(5.0,  np.array([ 1.0, 0.0, 0.0]), ZERO_A,                      "Разгон вперед"),
     Stage(10.0, ZERO_A,                     ZERO_A,                      "Крейсерская скорость 1"),

@@ -105,9 +105,13 @@ def simulate_gnss_raw(df_gnss_clean: pd.DataFrame, cfg: TrajectoryConfig) -> pd.
 # ГНСС (КООРДИНАТЫ) И ЛР1
 # ==========================================
 def process_gnss(df_imu: pd.DataFrame, cfg: TrajectoryConfig) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Прореживает до ГНСС частоты, переводит координаты в WGS84 и добавляет шум."""
+    # Прореживание
     step = max(1, int(round(cfg.dt_gnss / cfg.dt_imu)))
     df_gnss_true = df_imu.iloc[::step].copy().reset_index(drop=True)
     
+    # 1. Формируем "чистую" ГНСС траекторию (истина)
+    # Используем координаты антенны, т.к. именно она принимает сигнал
     df_clean = pd.DataFrame()
     df_clean['t'] = df_gnss_true['t']
     df_clean['E'] = df_gnss_true['E_ant']
@@ -116,7 +120,8 @@ def process_gnss(df_imu: pd.DataFrame, cfg: TrajectoryConfig) -> Tuple[pd.DataFr
     df_clean['vE'] = df_gnss_true['vE']
     df_clean['vN'] = df_gnss_true['vN']
     df_clean['vU'] = df_gnss_true['vU']
-    
+
+    # Конвертация истинной позиции ENU -> ECEF -> LLH
     ecef_coords = [enu_to_ecef(r['E'], r['N'], r['U'], cfg.ref_lat, cfg.ref_lon, cfg.ref_alt) 
                    for _, r in df_clean.iterrows()]
     df_clean['X_ecef'], df_clean['Y_ecef'], df_clean['Z_ecef'] = zip(*ecef_coords)
@@ -124,6 +129,7 @@ def process_gnss(df_imu: pd.DataFrame, cfg: TrajectoryConfig) -> Tuple[pd.DataFr
     llh_coords = [ecef_to_llh(x, y, z) for x, y, z in ecef_coords]
     df_clean['lat'], df_clean['lon'], df_clean['alt'] = zip(*llh_coords)
     
+    # 2. Формируем "зашумлённую" ГНСС траекторию (измерения)
     df_noisy = df_clean.copy()
     np.random.seed(cfg.seed_gnss)
     
@@ -135,6 +141,7 @@ def process_gnss(df_imu: pd.DataFrame, cfg: TrajectoryConfig) -> Tuple[pd.DataFr
     df_noisy['N'] += noise_n
     df_noisy['U'] += noise_u
     
+    # Пересчёт зашумленных ECEF/LLH (т.к. мы шумим позицию ENU)
     noisy_ecef = [enu_to_ecef(r['E'], r['N'], r['U'], cfg.ref_lat, cfg.ref_lon, cfg.ref_alt) 
                   for _, r in df_noisy.iterrows()]
     df_noisy['X_ecef'], df_noisy['Y_ecef'], df_noisy['Z_ecef'] = zip(*noisy_ecef)
