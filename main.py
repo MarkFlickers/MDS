@@ -5,7 +5,9 @@ from graph import plot_results, plot_kf_comparison
 from dataclasses import asdict
 from data_io import save_trajectories, save_metadata
 from metrics import calculate_rmse
-from kalman import LinearKalmanFilter
+from kalman import LinearKalmanFilter, GNSSKalmanFilter
+from coord_conversion import ecef_to_enu, enu_to_ecef
+from wls import WlsConfig, wls_epoch
 import pandas as pd
 import numpy as np
 
@@ -67,8 +69,53 @@ def test_kalman_filter(df_true: pd.DataFrame, df_meas: pd.DataFrame, config: Tra
         print(f"  СКО 3D Скорости: {metrics['vel_rmse_3d']:.2f} м/с")
         
         # Строим графики с переименованными колонками для совместимости
-        df_kf_for_plot = df_kf.rename(columns={'E_est': 'E', 'N_est': 'N', 'U_est': 'U'})
+        df_kf_for_plot = df_kf.rename(columns={'E_est': 'E', 'N_est': 'N', 'U_est': 'U', 'vE_est': 'vE', 'vN_est': 'vN', 'vU_est': 'vU'})
         plot_kf_comparison(df_true, df_meas, df_kf_for_plot, sigma_a_label=sigma_a)
+
+def test_wls(config: TrajectoryConfig) -> pd.DataFrame:
+    config = TrajectoryConfig()
+
+    df_raw = pd.read_csv("output/gnss_raw_observables.csv")
+    df_true = pd.read_csv("output/trajectory_gnss_true.csv")
+
+    wls_cfg = WlsConfig(
+        max_iter=10,
+        tol=1e-3,
+        sigma_pr=config.raw_pr_sigma,  # можно оставить cfg.gnss_pos_sigma, но правильнее sigma псевдодальности
+        use_elevation_weights=True,
+        el_mask_deg=0.0
+    )
+
+    # Начальное приближение: опорная точка ENU=(0,0,0) в ECEF + cb=0
+    x_ref, y_ref, z_ref = enu_to_ecef(0.0, 0.0, 0.0, config.ref_lat, config.ref_lon, config.ref_alt)
+    x0 = np.array([x_ref, y_ref, z_ref, 0.0], dtype=float)
+
+    wls_rows = []
+    x_prev = x0.copy()
+
+    for t, g in df_raw.groupby("t"):
+        g = g.reset_index(drop=True)
+
+        sol = wls_epoch(g, x_prev, wls_cfg)
+        x_hat = sol["x_hat"]
+        P_hat = sol["P_hat"]
+
+        wls_rows.append({
+            "t": float(t),
+            "X": x_hat[0], "Y": x_hat[1], "Z": x_hat[2],
+            "cb": x_hat[3],
+            "P00": P_hat[0, 0], "P11": P_hat[1, 1], "P22": P_hat[2, 2], "P33": P_hat[3, 3],
+        })
+
+        x_prev = x_hat  # warm start для следующей эпохи
+
+    df_wls = pd.DataFrame(wls_rows)
+
+    # Для сравнения и графиков переведём WLS в ENU
+    enu = np.array([ecef_to_enu(r.X, r.Y, r.Z, config.ref_lat, config.ref_lon, config.ref_alt) for r in df_wls.itertuples()])
+    df_wls["E"], df_wls["N"], df_wls["U"] = enu[:, 0], enu[:, 1], enu[:, 2]
+
+    return df_wls
 
 # 1. Инициализация конфигурации
 config = TrajectoryConfig()
@@ -105,3 +152,4 @@ print("Построение графиков...")
 #plot_results(df_imu_clean, df_gnss_clean, df_gnss_noisy)
 
 #test_kalman_filter(df_gnss_clean, df_gnss_noisy, config)
+df_wls = test_wls(config)

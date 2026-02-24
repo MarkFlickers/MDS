@@ -41,3 +41,46 @@ def ecef_to_llh(x: float, y: float, z: float) -> Tuple[float, float, float]:
         lat = np.arctan2(z, p * (1 - e2_wgs84 * N / (N + alt)))
         
     return lat, lon, alt
+
+def llh_to_ecef(lat: float, lon: float, alt: float) -> Tuple[float, float, float]:
+    """LLH (рад, рад, м) -> ECEF (м)."""
+    sin_lat, cos_lat = np.sin(lat), np.cos(lat)
+    sin_lon, cos_lon = np.sin(lon), np.cos(lon)
+
+    N = a_wgs84 / np.sqrt(1.0 - e2_wgs84 * sin_lat**2)
+
+    x = (N + alt) * cos_lat * cos_lon
+    y = (N + alt) * cos_lat * sin_lon
+    z = (N * (1.0 - e2_wgs84) + alt) * sin_lat
+    return x, y, z
+
+
+def _R_ecef_to_enu(lat0: float, lon0: float) -> np.ndarray:
+    """
+    Матрица поворота ECEF->ENU в точке (lat0, lon0).
+    Согласована с вашей enu_to_ecef().
+    """
+    sin_lat, cos_lat = np.sin(lat0), np.cos(lat0)
+    sin_lon, cos_lon = np.sin(lon0), np.cos(lon0)
+
+    return np.array([
+        [-sin_lon,            cos_lon,           0.0],
+        [-sin_lat*cos_lon, -sin_lat*sin_lon,  cos_lat],
+        [ cos_lat*cos_lon,  cos_lat*sin_lon,  sin_lat]
+    ])
+
+
+def ecef_to_enu(x: float, y: float, z: float, lat0: float, lon0: float, alt0: float) -> Tuple[float, float, float]:
+    """ECEF точки -> ENU относительно опорной точки (lat0, lon0, alt0)."""
+    x0, y0, z0 = llh_to_ecef(lat0, lon0, alt0)
+    dx, dy, dz = x - x0, y - y0, z - z0
+    R = _R_ecef_to_enu(lat0, lon0)
+    e, n, u = R @ np.array([dx, dy, dz])
+    return float(e), float(n), float(u)
+
+
+def ecef_delta_to_enu(dx: float, dy: float, dz: float, lat0: float, lon0: float) -> Tuple[float, float, float]:
+    """ECEF-вектор (приращение) -> ENU-вектор в точке (lat0, lon0)."""
+    R = _R_ecef_to_enu(lat0, lon0)
+    e, n, u = R @ np.array([dx, dy, dz])
+    return float(e), float(n), float(u)

@@ -117,7 +117,7 @@ def plot_kf_comparison(df_true, df_meas, df_kf, sigma_a_label):
     fig.suptitle(f"Фильтр Калмана (Шум процесса $\sigma_a$ = {sigma_a_label})", fontsize=16)
 
     # 1. 3D Траектория
-    ax1 = fig.add_subplot(131, projection='3d')
+    ax1 = fig.add_subplot(231, projection='3d')
     ax1.plot(df_true['E'], df_true['N'], df_true['U'], 'k-', label='Истина')
     ax1.scatter(df_meas['E'], df_meas['N'], df_meas['U'], c='r', s=10, alpha=0.3, label='ГНСС')
     ax1.plot(df_kf['E'], df_kf['N'], df_kf['U'], 'b-', linewidth=2, label='ФК')
@@ -125,7 +125,7 @@ def plot_kf_comparison(df_true, df_meas, df_kf, sigma_a_label):
     ax1.legend()
 
     # 2. Проекция E-N (вид сверху)
-    ax2 = fig.add_subplot(132)
+    ax2 = fig.add_subplot(232)
     ax2.plot(df_true['E'], df_true['N'], 'k-', label='Истина')
     ax2.scatter(df_meas['E'], df_meas['N'], c='r', s=10, alpha=0.3, label='ГНСС')
     ax2.plot(df_kf['E'], df_kf['N'], 'b-', linewidth=2, label='ФК')
@@ -134,13 +134,35 @@ def plot_kf_comparison(df_true, df_meas, df_kf, sigma_a_label):
     ax2.legend()
 
     # 3. Высота от времени
-    ax3 = fig.add_subplot(133)
+    ax3 = fig.add_subplot(233)
     ax3.plot(df_true['t'], df_true['U'], 'k-', label='Истина')
     ax3.scatter(df_meas['t'], df_meas['U'], c='r', s=10, alpha=0.3, label='ГНСС')
     ax3.plot(df_kf['t'], df_kf['U'], 'b-', linewidth=2, label='ФК')
     ax3.set_title("Высота от времени")
     ax3.set_xlabel("Время, с"); ax3.set_ylabel("Up, м")
     ax3.legend()
+
+    # 4. Скорость от времени
+    ax4 = fig.add_subplot(234)
+    ax4.plot(df_true['t'], df_true['vE'], 'k-', label='Истина')
+    ax4.plot(df_kf['t'], df_kf['vE'], 'b-', linewidth=2, label='ФК')
+    ax4.set_title("Скорость вдоль E от времени")
+    ax4.set_xlabel("Время, с"); ax3.set_ylabel("East, м")
+    ax4.legend()
+
+    ax5 = fig.add_subplot(235)
+    ax5.plot(df_true['t'], df_true['vN'], 'k-', label='Истина')
+    ax5.plot(df_kf['t'], df_kf['vN'], 'b-', linewidth=2, label='ФК')
+    ax5.set_title("Скорость вдоль N от времени")
+    ax5.set_xlabel("Время, с"); ax3.set_ylabel("North, м")
+    ax5.legend()
+
+    ax6 = fig.add_subplot(236)
+    ax6.plot(df_true['t'], df_true['vU'], 'k-', label='Истина')
+    ax6.plot(df_kf['t'], df_kf['vU'], 'b-', linewidth=2, label='ФК')
+    ax6.set_title("Скорость вдоль U от времени")
+    ax6.set_xlabel("Время, с"); ax3.set_ylabel("Up, м")
+    ax6.legend()
 
     plt.tight_layout()
     plt.show()
