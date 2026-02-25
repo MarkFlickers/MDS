@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_results(df_imu: pd.DataFrame, df_gnss_clean: pd.DataFrame, df_gnss_noisy: pd.DataFrame):
+def plot_results(df_imu: pd.DataFrame, df_gnss_noisy: pd.DataFrame):
     """
     Строит графики:
     1. 3D траектория (сравнение Истины и ГНСС-измерений)
@@ -110,59 +110,65 @@ def plot_results(df_imu: pd.DataFrame, df_gnss_clean: pd.DataFrame, df_gnss_nois
     plt.tight_layout()
     plt.show()
 
-def plot_kf_comparison(df_true, df_meas, df_kf, sigma_a_label):
-    """Строит графики сравнения работы Фильтра Калмана."""
-    plt.style.use('bmh')
-    fig = plt.figure(figsize=(15, 5))
-    fig.suptitle(f"Фильтр Калмана (Шум процесса $\sigma_a$ = {sigma_a_label})", fontsize=16)
+def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.DataFrame, title_suffix: str = ""):
+    """
+    Отображает три окна с результатами фильтра Калмана:
+    1. 3D траектория.
+    2. Координаты E, N, U от времени.
+    3. Скорости vE, vN, vU от времени.
+    """
+    import matplotlib.pyplot as plt
 
-    # 1. 3D Траектория
-    ax1 = fig.add_subplot(231, projection='3d')
-    ax1.plot(df_true['E'], df_true['N'], df_true['U'], 'k-', label='Истина')
-    ax1.scatter(df_meas['E'], df_meas['N'], df_meas['U'], c='r', s=10, alpha=0.3, label='ГНСС')
-    ax1.plot(df_kf['E'], df_kf['N'], df_kf['U'], 'b-', linewidth=2, label='ФК')
-    ax1.set_title("3D Траектория")
-    ax1.legend()
+    # --- Окно 1: 3D Траектория ---
+    fig_3d = plt.figure(figsize=(10, 8))
+    ax_3d = fig_3d.add_subplot(111, projection='3d')
+    ax_3d.plot(df_true['E'], df_true['N'], df_true['U'], label='Истина', color='black', linewidth=2)
+    ax_3d.scatter(df_meas['E'], df_meas['N'], df_meas['U'], label='GNSS Измерения', color='red', s=10, alpha=0.5)
+    
+    # Обрабатываем названия колонок (если они имеют суффикс _est)
+    kf_E = df_kf['E_est'] if 'E_est' in df_kf.columns else df_kf['E']
+    kf_N = df_kf['N_est'] if 'N_est' in df_kf.columns else df_kf['N']
+    kf_U = df_kf['U_est'] if 'U_est' in df_kf.columns else df_kf['U']
+    
+    ax_3d.plot(kf_E, kf_N, kf_U, label='Оценка КФ', color='blue', linewidth=2)
+    ax_3d.set_xlabel('East (м)')
+    ax_3d.set_ylabel('North (м)')
+    ax_3d.set_zlabel('Up (м)')
+    ax_3d.set_title(f'3D Траектория {title_suffix}')
+    ax_3d.legend()
+    ax_3d.grid(True)
 
-    # 2. Проекция E-N (вид сверху)
-    ax2 = fig.add_subplot(232)
-    ax2.plot(df_true['E'], df_true['N'], 'k-', label='Истина')
-    ax2.scatter(df_meas['E'], df_meas['N'], c='r', s=10, alpha=0.3, label='ГНСС')
-    ax2.plot(df_kf['E'], df_kf['N'], 'b-', linewidth=2, label='ФК')
-    ax2.set_title("Проекция East-North")
-    ax2.set_xlabel("East, м"); ax2.set_ylabel("North, м")
-    ax2.legend()
-
-    # 3. Высота от времени
-    ax3 = fig.add_subplot(233)
-    ax3.plot(df_true['t'], df_true['U'], 'k-', label='Истина')
-    ax3.scatter(df_meas['t'], df_meas['U'], c='r', s=10, alpha=0.3, label='ГНСС')
-    ax3.plot(df_kf['t'], df_kf['U'], 'b-', linewidth=2, label='ФК')
-    ax3.set_title("Высота от времени")
-    ax3.set_xlabel("Время, с"); ax3.set_ylabel("Up, м")
-    ax3.legend()
-
-    # 4. Скорость от времени
-    ax4 = fig.add_subplot(234)
-    ax4.plot(df_true['t'], df_true['vE'], 'k-', label='Истина')
-    ax4.plot(df_kf['t'], df_kf['vE'], 'b-', linewidth=2, label='ФК')
-    ax4.set_title("Скорость вдоль E от времени")
-    ax4.set_xlabel("Время, с"); ax3.set_ylabel("East, м")
-    ax4.legend()
-
-    ax5 = fig.add_subplot(235)
-    ax5.plot(df_true['t'], df_true['vN'], 'k-', label='Истина')
-    ax5.plot(df_kf['t'], df_kf['vN'], 'b-', linewidth=2, label='ФК')
-    ax5.set_title("Скорость вдоль N от времени")
-    ax5.set_xlabel("Время, с"); ax3.set_ylabel("North, м")
-    ax5.legend()
-
-    ax6 = fig.add_subplot(236)
-    ax6.plot(df_true['t'], df_true['vU'], 'k-', label='Истина')
-    ax6.plot(df_kf['t'], df_kf['vU'], 'b-', linewidth=2, label='ФК')
-    ax6.set_title("Скорость вдоль U от времени")
-    ax6.set_xlabel("Время, с"); ax3.set_ylabel("Up, м")
-    ax6.legend()
-
+    # --- Окно 2: Сравнение координат в проекциях E, N, U ---
+    fig_pos, axs_pos = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    fig_pos.suptitle(f'Координаты (E, N, U) {title_suffix}', fontsize=16)
+    
+    axes_labels = ['E', 'N', 'U']
+    kf_labels = ['E_est', 'N_est', 'U_est'] if 'E_est' in df_kf.columns else axes_labels
+    
+    for i, (axis, kf_axis) in enumerate(zip(axes_labels, kf_labels)):
+        axs_pos[i].plot(df_true['t'], df_true[axis], label='Истина', color='black', linewidth=2)
+        axs_pos[i].scatter(df_meas['t'], df_meas[axis], label='GNSS', color='red', s=10, alpha=0.5)
+        axs_pos[i].plot(df_kf['t'], df_kf[kf_axis], label='КФ', color='blue', linewidth=2)
+        axs_pos[i].set_ylabel(f'{axis} (м)')
+        axs_pos[i].legend(loc='upper right')
+        axs_pos[i].grid(True)
+    axs_pos[2].set_xlabel('Время (с)')
     plt.tight_layout()
+
+    # --- Окно 3: Сравнение скоростей vE, vN, vU ---
+    fig_vel, axs_vel = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    fig_vel.suptitle(f'Скорости (vE, vN, vU) {title_suffix}', fontsize=16)
+    
+    vel_axes_labels = ['vE', 'vN', 'vU']
+    vel_kf_labels = ['vE_est', 'vN_est', 'vU_est'] if 'vE_est' in df_kf.columns else vel_axes_labels
+    
+    for i, (axis, kf_axis) in enumerate(zip(vel_axes_labels, vel_kf_labels)):
+        axs_vel[i].plot(df_true['t'], df_true[axis], label='Истина', color='black', linewidth=2)
+        axs_vel[i].plot(df_kf['t'], df_kf[kf_axis], label='КФ', color='blue', linewidth=2)
+        axs_vel[i].set_ylabel(f'{axis} (м/с)')
+        axs_vel[i].legend(loc='upper right')
+        axs_vel[i].grid(True)
+    axs_vel[2].set_xlabel('Время (с)')
+    plt.tight_layout()
+
     plt.show()
