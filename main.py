@@ -33,7 +33,7 @@ def run_lab01(df_true, df_meas, config):
     # 1. Часть: Моделирование траектории и шума 
     
     # 2. Часть: Настройка и запуск линейного фильтра Калмана
-    test_sigmas = [0.01, 1.0, 10.0]
+    test_sigmas = [0.01, 1.0, 10.0, 0.61]
     
     df_true_renamed = df_true[['t', 'E', 'N', 'U', 'vE', 'vN', 'vU']].rename(
         columns={'E': 'E_true', 'N': 'N_true', 'U': 'U_true',
