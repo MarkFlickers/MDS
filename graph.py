@@ -130,7 +130,7 @@ def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.D
     kf_N = df_kf['N_est'] if 'N_est' in df_kf.columns else df_kf['N']
     kf_U = df_kf['U_est'] if 'U_est' in df_kf.columns else df_kf['U']
     
-    ax_3d.plot(kf_E, kf_N, kf_U, label='Оценка КФ', color='blue', linewidth=2)
+    ax_3d.plot(kf_E, kf_N, kf_U, label='Оценка ФК', color='blue', linewidth=2)
     ax_3d.set_xlabel('East (м)')
     ax_3d.set_ylabel('North (м)')
     ax_3d.set_zlabel('Up (м)')
@@ -148,7 +148,7 @@ def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.D
     for i, (axis, kf_axis) in enumerate(zip(axes_labels, kf_labels)):
         axs_pos[i].plot(df_true['t'], df_true[axis], label='Истина', color='black', linewidth=2)
         axs_pos[i].scatter(df_meas['t'], df_meas[axis], label='GNSS', color='red', s=10, alpha=0.5)
-        axs_pos[i].plot(df_kf['t'], df_kf[kf_axis], label='КФ', color='blue', linewidth=2)
+        axs_pos[i].plot(df_kf['t'], df_kf[kf_axis], label='ФК', color='blue', linewidth=2)
         axs_pos[i].set_ylabel(f'{axis} (м)')
         axs_pos[i].legend(loc='upper right')
         axs_pos[i].grid(True)
@@ -164,7 +164,7 @@ def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.D
     
     for i, (axis, kf_axis) in enumerate(zip(vel_axes_labels, vel_kf_labels)):
         axs_vel[i].plot(df_true['t'], df_true[axis], label='Истина', color='black', linewidth=2)
-        axs_vel[i].plot(df_kf['t'], df_kf[kf_axis], label='КФ', color='blue', linewidth=2)
+        axs_vel[i].plot(df_kf['t'], df_kf[kf_axis], label='ФК', color='blue', linewidth=2)
         axs_vel[i].set_ylabel(f'{axis} (м/с)')
         axs_vel[i].legend(loc='upper right')
         axs_vel[i].grid(True)
