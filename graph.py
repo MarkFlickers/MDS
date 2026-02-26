@@ -172,3 +172,58 @@ def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.D
     plt.tight_layout()
 
     plt.show()
+
+# ... (предыдущий код файла graph.py остается без изменений)
+
+def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
+    """
+    Визуализация результатов Взвешенного МНК (WLS) vs Истина.
+    Строит графики ошибок по координатам (ENU).
+    """
+    # Убедимся, что данные отсортированы
+    df_true = df_true.sort_values('t')
+    df_wls = df_wls.sort_values('t')
+    
+    # Объединяем датафреймы по ближайшей временной метке (на случай рассинхрона частот)
+    # suffixes: _est для оценки (WLS), _true для истины
+    df_merged = pd.merge_asof(
+        df_wls, 
+        df_true[['t', 'E', 'N', 'U']], 
+        on='t', 
+        suffixes=('_est', '_true'), 
+        direction='nearest'
+    )
+    
+    # Вычисляем ошибки позиционирования
+    df_merged['err_E'] = df_merged['E_est'] - df_merged['E_true']
+    df_merged['err_N'] = df_merged['N_est'] - df_merged['N_true']
+    df_merged['err_U'] = df_merged['U_est'] - df_merged['U_true']
+    
+    # Считаем 3D ошибку и HDOP/VDOP (из ковариации, если она есть в df_wls)
+    # Но пока просто построим ошибки координат
+    
+    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    fig.suptitle('Ошибки решения Взвешенного МНК (WLS Errors)', fontsize=16)
+    
+    cols = ['err_E', 'err_N', 'err_U']
+    titles = ['East Error', 'North Error', 'Up Error']
+    colors = ['r', 'g', 'b']
+    
+    for i, (col, title, color) in enumerate(zip(cols, titles, colors)):
+        rmse = np.sqrt((df_merged[col]**2).mean())
+        max_err = df_merged[col].abs().max()
+        
+        ax = axes[i]
+        ax.plot(df_merged['t'], df_merged[col], color=color, label=f'Error', linewidth=1)
+        ax.axhline(0, color='black', linestyle='--', linewidth=0.5)
+        
+        # Добавляем статистику в легенду
+        ax.legend([f'RMSE: {rmse:.2f} m\nMax: {max_err:.2f} m'], loc='upper right')
+        
+        ax.set_ylabel('Ошибка [м]')
+        ax.set_title(title)
+        ax.grid(True)
+        
+    axes[2].set_xlabel('Время [с]')
+    plt.tight_layout()
+    plt.show()

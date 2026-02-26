@@ -3,7 +3,7 @@ import numpy as np
 from configuration import TrajectoryConfig, stages_scenario
 from trajectory import generate_trajectory, simulate_imu_errors
 from gnss import process_gnss, simulate_gnss_raw
-from graph import plot_results, plot_kf_comparison
+from graph import plot_results, plot_kf_comparison, plot_wls_results
 from metrics import calculate_rmse
 from kalman import LinearKalmanFilter, GNSSKalmanFilter
 from coord_conversion import ecef_to_enu, enu_to_ecef
@@ -21,7 +21,6 @@ def generate_all_data():
     df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
     save_trajectories(df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw)
     save_metadata(config)
-    plot_results(df_imu_clean, df_gnss_noisy)
     return config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw
 
 # ==========================================
@@ -110,7 +109,7 @@ def run_lab02(df_raw, df_true, config):
     df_wls['U'] = enu[:, 2]
     
     print("WLS посчитан: проверьте точность df_wls (E,N,U) относительно истины.")
-    
+    plot_wls_results(df_true, df_wls)
     # 2. Часть: Расширенный КФ с оценкой часов (cb, cd) и обновлением по доплерам
     print("Место для эксперимента: GNSSKalmanFilter с обновлением по Доплеру.")
     return df_wls
@@ -137,6 +136,7 @@ def run_lab04():
 if __name__ == "__main__":
     config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
     
+    plot_results(df_imu_clean, df_gnss_noisy)
     run_lab01(df_gnss_clean, df_gnss_noisy, config)
     run_lab02(df_gnss_raw, df_gnss_clean, config)
     run_lab03()
