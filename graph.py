@@ -34,7 +34,7 @@ def plot_results(df_imu: pd.DataFrame, df_gnss_noisy: pd.DataFrame):
     ax.set_xlabel('East [m]')
     ax.set_ylabel('North [m]')
     ax.set_zlabel('Up [m]')
-    ax.set_title('3D Траектория движения (Антенна)')
+    ax.set_title('3D Траектория движения (ИНС)')
     ax.legend()
     
     # Выравнивание осей для корректного восприятия масштаба
