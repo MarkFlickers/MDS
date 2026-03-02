@@ -173,8 +173,6 @@ def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.D
 
     plt.show()
 
-# ... (предыдущий код файла graph.py остается без изменений)
-
 def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
     """
     Визуализация результатов Взвешенного МНК (WLS) vs Истина.
