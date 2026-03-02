@@ -10,6 +10,48 @@ from coord_conversion import ecef_to_enu, enu_to_ecef
 from wls import WlsConfig, wls_epoch
 from data_io import save_trajectories, save_metadata
 
+def get_Q_piecewise_white_noise(dt: float, sigma_a: float) -> np.ndarray:
+    Q = np.zeros((6, 6))
+    dt2 = dt**2
+    dt3 = dt**3 / 2.0
+    dt4 = dt**4 / 4.0
+    
+    q_block = np.array([
+        [dt4, dt3],
+        [dt3, dt2]
+    ]) * (sigma_a ** 2)
+
+    for i in range(3):
+        Q[i, i] = q_block[0, 0]          # pos-pos
+        Q[i, i+3] = q_block[0, 1]        # pos-vel
+        Q[i+3, i] = q_block[1, 0]        # vel-pos
+        Q[i+3, i+3] = q_block[1, 1]      # vel-vel
+
+    return Q
+
+def get_Q_continuous_white_noise(dt: float, sigma_a: float) -> np.ndarray:
+    Q = np.zeros((6, 6))
+    dt2 = dt**2 / 2.0
+    dt3 = dt**3 / 3.0
+    
+    q_block = np.array([
+        [dt3, dt2],
+        [dt2, dt]
+    ]) * (sigma_a ** 2)
+
+    for i in range(3):
+        Q[i, i] = q_block[0, 0]          # pos-pos
+        Q[i, i+3] = q_block[0, 1]        # pos-vel
+        Q[i+3, i] = q_block[1, 0]        # vel-pos
+        Q[i+3, i+3] = q_block[1, 1]      # vel-vel
+        
+    return Q
+
+def get_R(sigma_measurement: float) -> np.ndarray:
+    """ Матрица ковариации шума измерений R (3x3) """
+    R = np.eye(3) * sigma_measurement**2
+    return R
+
 # ==========================================
 # Общая генерация данных
 # ==========================================
@@ -28,49 +70,51 @@ def generate_all_data():
 # ==========================================
 def run_lab01(df_true, df_meas, config):
     print("\n--- Lab 01: Linear Kalman Filter ---")
-    
-    # 1. Часть: Моделирование траектории и шума 
-    
-    # 2. Часть: Настройка и запуск линейного фильтра Калмана
-    test_sigmas = [0.01, 1.0, 10.0, 0.61]
+    # Настройка и запуск линейного фильтра Калмана
+    test_sigmas = [0.01, 1.0, 10.0, 0.69, 0.7, 0.73]
     
     df_true_renamed = df_true[['t', 'E', 'N', 'U', 'vE', 'vN', 'vU']].rename(
         columns={'E': 'E_true', 'N': 'N_true', 'U': 'U_true',
                  'vE': 'vE_true', 'vN': 'vN_true', 'vU': 'vU_true'}
     )
     
-    for sigma_a in test_sigmas:
-        z0 = df_meas.iloc[0][['E', 'N', 'U']].values
-        x0 = np.array([z0[0], z0[1], z0[2], 0.0, 0.0, 0.0])
-        P0 = np.eye(6)
-        P0[0:3, 0:3] *= (config.gnss_pos_sigma ** 2)
-        P0[3:6, 3:6] *= 100.0
-        
-        kf = LinearKalmanFilter(
-            dt=config.dt_gnss,
-            sigma_a=sigma_a,
-            sigma_gnss=config.gnss_pos_sigma,
-            x0=x0,
-            P0=P0
-        )
-        
-        kf_results = []
-        for _, row in df_meas.iterrows():
-            z = np.array([row['E'], row['N'], row['U']])
-            x_est, P_est = kf.step(z)
-            kf_results.append({
-                't': row['t'],
-                'E_est': x_est[0], 'N_est': x_est[1], 'U_est': x_est[2],
-                'vE_est': x_est[3], 'vN_est': x_est[4], 'vU_est': x_est[5]
-            })
-            
-        df_kf = pd.DataFrame(kf_results)
-        metrics = calculate_rmse(df_true_renamed, df_kf)
-        print(f"Sigma_a = {sigma_a} (Дисперсия Q): Ошибка Pos = {metrics['pos_rmse_3d']:.2f} м, Скорость = {metrics['vel_rmse_3d']:.2f} м/с")
 
-        plot_kf_comparison(df_true, df_meas, df_kf)
-        
-    # 3. Часть: Анализ результатов и подготовка к ответам на вопросы к защите
+    z0 = df_meas.iloc[0][['E', 'N', 'U']].values
+    x0 = np.array([z0[0], z0[1], z0[2], 0.0, 0.0, 0.0])
+    P0 = np.eye(6)
+    P0[0:3, 0:3] *= (config.gnss_pos_sigma ** 2)
+    P0[3:6, 3:6] *= 100.0
+    R = get_R(config.gnss_pos_sigma)
+    for sigma_a in test_sigmas:
+        for Q in [get_Q_continuous_white_noise(config.dt_gnss, sigma_a), get_Q_piecewise_white_noise(config.dt_gnss, sigma_a)]:
+            kf = LinearKalmanFilter(
+                dt=config.dt_gnss,
+                Q=Q,
+                R=R,
+                x0=x0,
+                P0=P0
+            )
+
+            kf_results = []
+            for _, row in df_meas.iterrows():
+                z = np.array([row['E'], row['N'], row['U']])
+                x_est, P_est = kf.step(z)
+                kf_results.append({
+                    't': row['t'],
+                    'E_est': x_est[0], 'N_est': x_est[1], 'U_est': x_est[2],
+                    'vE_est': x_est[3], 'vN_est': x_est[4], 'vU_est': x_est[5]
+                })
+
+            df_kf = pd.DataFrame(kf_results)
+            metrics = calculate_rmse(df_true_renamed, df_kf)
+            if np.array_equal(Q, get_Q_continuous_white_noise(config.dt_gnss, sigma_a)) :
+                print("Модель непрерывного белого шума, ", end="")
+            elif np.array_equal(Q, get_Q_piecewise_white_noise(config.dt_gnss, sigma_a)):
+                print("Модель \"кусочного\" белого шума, ", end="")
+            print(f"Дисперсия неучтённого ускорения = {sigma_a}: Ошибка Координаты = {metrics['pos_rmse_3d']:.3f} м, ошибка скорости = {metrics['vel_rmse_3d']:.3f} м/с")
+
+            #plot_kf_comparison(df_true, df_meas, df_kf)
+
     # Анализируется влияние матрицы R (шум измерений) и Q (шум процесса)
 
 # ==========================================
@@ -136,8 +180,8 @@ def run_lab04():
 if __name__ == "__main__":
     config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
     
-    plot_results(df_imu_clean, df_gnss_noisy)
+    #plot_results(df_imu_clean, df_gnss_noisy)
     run_lab01(df_gnss_clean, df_gnss_noisy, config)
-    run_lab02(df_gnss_raw, df_gnss_clean, config)
-    run_lab03()
-    run_lab04()
+    #run_lab02(df_gnss_raw, df_gnss_clean, config)
+    #run_lab03()
+    #run_lab04()
