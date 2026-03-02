@@ -56,10 +56,7 @@ def llh_to_ecef(lat: float, lon: float, alt: float) -> Tuple[float, float, float
 
 
 def _R_ecef_to_enu(lat0: float, lon0: float) -> np.ndarray:
-    """
-    Матрица поворота ECEF->ENU в точке (lat0, lon0).
-    Согласована с вашей enu_to_ecef().
-    """
+    """ Матрица поворота ECEF->ENU в точке (lat0, lon0). """
     sin_lat, cos_lat = np.sin(lat0), np.cos(lat0)
     sin_lon, cos_lon = np.sin(lon0), np.cos(lon0)
 
