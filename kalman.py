@@ -29,7 +29,7 @@ class LinearKalmanFilter(BaseKalmanFilter):
     Вектор состояния (6x1): [E, N, U, vE, vN, vU]^T
     Вектор измерений (3x1): [E_gnss, N_gnss, U_gnss]^T
     """
-    def __init__(self, dt: float, sigma_a: float, sigma_gnss: float, x0: np.ndarray, P0: np.ndarray):
+    def __init__(self, dt: float, Q: np.ndarray, R: np.ndarray, x0: np.ndarray, P0: np.ndarray):
         super().__init__(x0, P0)
         self.dt = dt
         
@@ -41,26 +41,8 @@ class LinearKalmanFilter(BaseKalmanFilter):
         self.H = np.zeros((3, 6))
         self.H[0, 0] = self.H[1, 1] = self.H[2, 2] = 1.0
         
-        # Матрица ковариации шума измерений R (3x3)
-        self.R = np.eye(3) * (sigma_gnss ** 2)
-        
-        # Матрица ковариации шума процесса Q (6x6) для дискретной модели Continuous White Noise Acceleration
-        dt2 = dt**2
-        dt3 = dt**3 / 2.0
-        dt4 = dt**4 / 4.0
-        
-        q_block = np.array([
-            [dt4, dt3],
-            [dt3, dt2]
-        ]) * (sigma_a ** 2)
-        
-        self.Q = np.zeros((6, 6))
-        # Разносим блоки для осей E, N, U
-        for i in range(3):
-            self.Q[i, i] = q_block[0, 0]          # pos-pos
-            self.Q[i, i+3] = q_block[0, 1]        # pos-vel
-            self.Q[i+3, i] = q_block[1, 0]        # vel-pos
-            self.Q[i+3, i+3] = q_block[1, 1]      # vel-vel
+        self.R = R
+        self.Q = Q
 
     def step(self, z: np.ndarray):
         self.predict(self.F, self.Q)
