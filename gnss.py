@@ -6,6 +6,9 @@ from typing import Tuple
 from configuration import TrajectoryConfig
 from coord_conversion import c_light, ecef_to_llh, enu_to_ecef
 
+Grav_const = 6.67 * 10**(-11)
+earth_mass = 5.9722 * 10**24 
+
 # ==========================================
 # СЫРЫЕ НАБЛЮДЕНИЯ ГНСС
 # ==========================================
@@ -69,8 +72,12 @@ def simulate_gnss_raw(df_gnss_clean: pd.DataFrame, cfg: TrajectoryConfig) -> pd.
         c_d = clk_drift[i] * c_light
         
         for sv_id in range(cfg.num_satellites):
-            r_sat = sat_positions[sv_id]
+            # Моделирование движения спутника
+            sat_velocities[sv_id] += Grav_const * earth_mass / ((np.norm(sat_positions[sv_id]))**2) * dt
+            sat_positions[sv_id] += sat_velocities[sv_id] * dt
+
             v_sat = sat_velocities[sv_id]
+            r_sat = sat_positions[sv_id]
             
             # Геометрическая дальность
             delta_r = r_sat - r_rec

@@ -72,6 +72,7 @@ def run_lab01(df_true, df_meas, config):
     print("\n--- Lab 01: Linear Kalman Filter ---")
     # Настройка и запуск линейного фильтра Калмана
     test_sigmas = [0.01, 1.0, 10.0, 0.69, 0.7, 0.73]
+    # test_sigmas = [0.69]
     
     df_true_renamed = df_true[['t', 'E', 'N', 'U', 'vE', 'vN', 'vU']].rename(
         columns={'E': 'E_true', 'N': 'N_true', 'U': 'U_true',
@@ -113,7 +114,8 @@ def run_lab01(df_true, df_meas, config):
                 print("Модель \"кусочного\" белого шума, ", end="")
             print(f"СКО неучтённого ускорения = {sigma_a}: Ошибка Координаты = {metrics['pos_rmse_3d']:.3f} м, ошибка скорости = {metrics['vel_rmse_3d']:.3f} м/с")
 
-            #plot_kf_comparison(df_true, df_meas, df_kf)
+            # plot_kf_comparison(df_true, df_meas, df_kf)
+        # plot_kf_comparison(df_true, df_meas, df_kf)
 
     # Анализируется влияние матрицы R (шум измерений) и Q (шум процесса)
 
@@ -151,11 +153,10 @@ def run_lab02(df_raw, df_true, config):
     df_wls['E'] = enu[:, 0]
     df_wls['N'] = enu[:, 1]
     df_wls['U'] = enu[:, 2]
-    
-    print("WLS посчитан: проверьте точность df_wls (E,N,U) относительно истины.")
+
     plot_wls_results(df_true, df_wls)
     # 2. Часть: Расширенный КФ с оценкой часов (cb, cd) и обновлением по доплерам
-    print("Место для эксперимента: GNSSKalmanFilter с обновлением по Доплеру.")
+
     return df_wls
 
 # ==========================================
@@ -180,7 +181,7 @@ def run_lab04():
 if __name__ == "__main__":
     config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
     
-    #plot_results(df_imu_clean, df_gnss_noisy)
+    plot_results(df_imu_clean, df_gnss_noisy)
     run_lab01(df_gnss_clean, df_gnss_noisy, config)
     #run_lab02(df_gnss_raw, df_gnss_clean, config)
     #run_lab03()
