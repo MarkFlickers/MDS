@@ -111,7 +111,7 @@ def run_lab01(df_true, df_meas, config):
                 print("Модель непрерывного белого шума, ", end="")
             elif np.array_equal(Q, get_Q_piecewise_white_noise(config.dt_gnss, sigma_a)):
                 print("Модель \"кусочного\" белого шума, ", end="")
-            print(f"Дисперсия неучтённого ускорения = {sigma_a}: Ошибка Координаты = {metrics['pos_rmse_3d']:.3f} м, ошибка скорости = {metrics['vel_rmse_3d']:.3f} м/с")
+            print(f"СКО неучтённого ускорения = {sigma_a}: Ошибка Координаты = {metrics['pos_rmse_3d']:.3f} м, ошибка скорости = {metrics['vel_rmse_3d']:.3f} м/с")
 
             #plot_kf_comparison(df_true, df_meas, df_kf)
 
