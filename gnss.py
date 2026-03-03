@@ -73,6 +73,8 @@ def simulate_gnss_raw(df_gnss_clean: pd.DataFrame, cfg: TrajectoryConfig) -> pd.
         
         for sv_id in range(cfg.num_satellites):
             # Моделирование движения спутника
+            # TODO: спроецировать ускорение на скорости
+            raise ValueError
             sat_velocities[sv_id] += Grav_const * earth_mass / ((np.norm(sat_positions[sv_id]))**2) * dt
             sat_positions[sv_id] += sat_velocities[sv_id] * dt
 
