@@ -10,26 +10,18 @@ from coord_conversion import ecef_to_enu, enu_to_ecef
 from wls import WlsConfig, wls_epoch
 from data_io import save_trajectories, save_metadata
 
-def show_satellite_positions(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryConfig):
+def show_satellite_positions(df_true: pd.DataFrame, config: TrajectoryConfig):
     """
-    Извлекает начальные координаты приемника и генерирует кольца орбит 
-    для передачи в функцию отрисовки 3D модели Земли.
+    Генерирует положения всех спутников группировки на момент t0
+    и передает их на отрисовку 3D модели.
     """
     from coord_conversion import enu_to_ecef
     from gnss import _compute_satellite_state, GM_EARTH
     
-    print("\n  -> Отрисовка 3D модели Земли и орбит...")
+    print("\n  -> Отрисовка 3D модели Земли и орбит (все спутники)...")
     
-    # 1. Извлекаем сырые данные спутников для t0
+    # 1. Получаем время и ECEF координаты приемника (машины)
     t0 = df_true['t'].iloc[0]
-    epoch_raw = df_raw[df_raw['t'] == t0]
-    if len(epoch_raw) == 0:
-        print("Внимание: для t0 нет видимых спутников!")
-        return
-        
-    sat_positions = epoch_raw[['sat_X', 'sat_Y', 'sat_Z']].values
-    
-    # 2. Получаем ECEF координаты приемника (машины)
     row0 = df_true.iloc[0]
     rec_X, rec_Y, rec_Z = enu_to_ecef(
         row0['E'], row0['N'], row0['U'], 
@@ -37,20 +29,22 @@ def show_satellite_positions(df_raw: pd.DataFrame, df_true: pd.DataFrame, config
     )
     receiver_pos = np.array([rec_X, rec_Y, rec_Z])
     
-    # 3. Генерируем полные кольца орбит для каждого спутника
-    # Считаем период обращения орбиты: T = 2*pi * sqrt(R^3 / GM)
+    # 2. Генерируем положение ВСЕХ спутников на момент t0
+    total_sim_satellites = config.num_satellites
     R_orb = config.satellite_radius
-    period = 2 * np.pi * np.sqrt((R_orb**3) / GM_EARTH)
     
-    # Генерируем 100 точек на полный оборот
+    all_sats = []
+    for svid in range(total_sim_satellites):
+        r_sat, _ = _compute_satellite_state(t0, svid, total_sim_satellites, R_orb)
+        all_sats.append(r_sat)
+            
+    all_sats = np.array(all_sats)
+    
+    # 3. Генерируем кольца орбит
+    period = 2 * np.pi * np.sqrt((R_orb**3) / GM_EARTH)
     time_steps = np.linspace(0, period, 100)
     
-    # Нам нужно нарисовать орбиты только для уникальных плоскостей (или для всех спутников, они совпадут)
-    total_sim_satellites = config.num_satellites
     orbit_lines = []
-    
-    # Чтобы не рисовать 24 раза одно и то же (когда спутники летят в одной плоскости),
-    # нарисуем орбиту для первых 6 спутников (так как у нас 6 плоскостей Walker Constellation)
     num_planes = 6
     for svid in range(num_planes):
         pts = []
@@ -61,7 +55,7 @@ def show_satellite_positions(df_raw: pd.DataFrame, df_true: pd.DataFrame, config
     
     # 4. Вызов отрисовки
     from graph import plot_earth_and_satellites
-    plot_earth_and_satellites(sat_positions, receiver_pos, orbit_lines=orbit_lines)
+    plot_earth_and_satellites(all_sats, receiver_pos, orbit_lines=orbit_lines)
 
 
 def get_Q_piecewise_white_noise(dt: float, sigma_a: float) -> np.ndarray:
@@ -317,7 +311,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     })
     
     # Отрисовка геометрии орбит в момент t=0
-    show_satellite_positions(df_raw, df_true, config)
+    show_satellite_positions(df_true, config)
 
     # --- Шаг 1: Решение МНК (WLS) ---
     df_wls = run_wls_solver(df_raw, config)

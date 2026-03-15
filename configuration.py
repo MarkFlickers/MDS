@@ -50,7 +50,7 @@ class TrajectoryConfig:
     clock_drift_init: float = 1e-7     # Сек/сек (ок. 30 м/с ошибки доплера)
     clock_bias_noise: float = 1e-9     # Шум дрейфа часов
     # Спутники
-    num_satellites: int = 24            # Количество видимых спутников
+    num_satellites: int = 36            # Количество видимых спутников
     satellite_radius: float = 26600000.0 # Радиус орбиты GPS (м)
     raw_pr_sigma: float = 2.0          # СКО шума псевдодальности (м)
     raw_doppler_sigma: float = 0.1     # СКО шума доплера (м/с)

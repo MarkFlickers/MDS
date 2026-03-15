@@ -216,13 +216,17 @@ def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
 
 def plot_earth_and_satellites(sat_positions: np.ndarray, receiver_pos: np.ndarray, orbit_lines: list = None):
     """
-    Рисует 3D модель Земли и распределение спутников в ECEF, включая полные кольца орбит.
+    Рисует 3D модель Земли, орбиты и спутники.
+    Внутри себя проверяет, какие спутники видимы (над горизонтом), 
+    рисует их красным и строит к ним линии визирования (LOS).
     sat_positions: Массив (N, 3) координат спутников (ECEF)
     receiver_pos: Массив (3,) координат приемника (ECEF)
     orbit_lines: Список массивов (M, 3) с точками орбит для отрисовки колец
     """
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D
+    import numpy as np
+    from gnss import _is_satellite_visible
 
     R_EARTH = 6371000.0
 
@@ -236,31 +240,46 @@ def plot_earth_and_satellites(sat_positions: np.ndarray, receiver_pos: np.ndarra
     y_sphere = R_EARTH * np.outer(np.sin(u), np.sin(v))
     z_sphere = R_EARTH * np.outer(np.ones(np.size(u)), np.cos(v))
     
-    ax.plot_wireframe(x_sphere, y_sphere, z_sphere, color='lightblue', linewidth=0.5, alpha=0.3)
+    ax.plot_wireframe(x_sphere, y_sphere, z_sphere, color='lightblue', linewidth=0.5, alpha=0.5)
 
     # --- 2. Экватор и Меридиан ---
     theta = np.linspace(0, 2 * np.pi, 100)
-    ax.plot(R_EARTH * np.cos(theta), R_EARTH * np.sin(theta), np.zeros_like(theta), color='blue', alpha=0.5, label='Экватор')
-    ax.plot(R_EARTH * np.cos(theta), np.zeros_like(theta), R_EARTH * np.sin(theta), color='green', alpha=0.5, label='Нулевой меридиан')
+    ax.plot(R_EARTH * np.cos(theta), R_EARTH * np.sin(theta), np.zeros_like(theta), color='blue', alpha=0.9, label='Экватор')
+    ax.plot(R_EARTH * np.cos(theta), np.zeros_like(theta), R_EARTH * np.sin(theta), color='green', alpha=0.9, label='Нулевой меридиан')
 
-    # --- 3. Отрисовка КОЛЕЦ ОРБИТ ---
+    # --- 3. Отрисовка колец орбит ---
     if orbit_lines is not None:
         for i, orb_pts in enumerate(orbit_lines):
-            # Добавляем label только для первой орбиты, чтобы не засорять легенду
             label = 'Орбиты ГНСС' if i == 0 else ""
             ax.plot(orb_pts[:, 0], orb_pts[:, 1], orb_pts[:, 2], color='gray', linewidth=1.0, alpha=0.4, label=label)
 
-    # --- 4. Отрисовка Спутников ---
-    ax.scatter(sat_positions[:, 0], sat_positions[:, 1], sat_positions[:, 2], 
-               color='red', s=40, label='Спутники ГНСС (t=0)', depthshade=False, zorder=5)
-
-    # Линии визирования (LOS) от приемника к видимым спутникам (опционально, для красоты)
+    # --- 4. Фильтрация и Отрисовка Спутников ---
+    visible_sats = []
+    invisible_sats = []
+    
+    # Распределяем спутники на видимые и невидимые (угол места > 5 градусов)
     for sat in sat_positions:
-        # Проверяем, не перекрыта ли Землей (упрощенно: скалярное произведение)
-        vec_to_sat = sat - receiver_pos
-        if np.dot(receiver_pos, vec_to_sat) > 0:
+        if _is_satellite_visible(sat, receiver_pos, mask_angle_deg=5.0):
+            visible_sats.append(sat)
+        else:
+            invisible_sats.append(sat)
+            
+    visible_sats = np.array(visible_sats) if len(visible_sats) > 0 else np.empty((0, 3))
+    invisible_sats = np.array(invisible_sats) if len(invisible_sats) > 0 else np.empty((0, 3))
+
+    # Рисуем невидимые спутники (за горизонтом)
+    if len(invisible_sats) > 0:
+        ax.scatter(invisible_sats[:, 0], invisible_sats[:, 1], invisible_sats[:, 2], 
+                   color='gray', s=20, label='Спутники (за горизонтом)', alpha=0.5, depthshade=False, zorder=4)
+
+    # Рисуем видимые спутники и линии визирования (LOS)
+    if len(visible_sats) > 0:
+        ax.scatter(visible_sats[:, 0], visible_sats[:, 1], visible_sats[:, 2], 
+                   color='red', s=50, label='Видимые спутники', depthshade=False, zorder=5)
+
+        for sat in visible_sats:
             ax.plot([receiver_pos[0], sat[0]], [receiver_pos[1], sat[1]], [receiver_pos[2], sat[2]], 
-                    color='orange', linestyle=':', linewidth=0.5, alpha=0.5)
+                    color='orange', linestyle=':', linewidth=1.0, alpha=0.8)
 
     # --- 5. Отрисовка Приемника ---
     ax.scatter(*receiver_pos, color='magenta', s=150, marker='*', label='Приемник (Машина)', depthshade=False, zorder=10)
@@ -276,9 +295,9 @@ def plot_earth_and_satellites(sat_positions: np.ndarray, receiver_pos: np.ndarra
     ax.set_xlabel('X (ECEF) [м]')
     ax.set_ylabel('Y (ECEF) [м]')
     ax.set_zlabel('Z (ECEF) [м]')
-    ax.set_title('Орбитальная группировка ГНСС (Walker Constellation) в ECEF', fontsize=14)
+    ax.set_title('Орбитальная группировка ГНСС (Walker Constellation)', fontsize=14)
     
-    # Делаем черный фон как в космосе (Опционально)
+    # Космический фон
     ax.set_facecolor('black')
     ax.xaxis.set_pane_color((0.1, 0.1, 0.1, 1.0))
     ax.yaxis.set_pane_color((0.1, 0.1, 0.1, 1.0))
