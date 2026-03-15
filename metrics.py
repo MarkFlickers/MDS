@@ -14,10 +14,13 @@ def calculate_rmse(df_true: pd.DataFrame, df_est: pd.DataFrame) -> dict:
     pos_rmse = np.sqrt(np.mean(err_E**2 + err_N**2 + err_U**2))
     
     # Ошибки по скорости
-    err_vE = df_merged['vE_est'] - df_merged['vE_true']
-    err_vN = df_merged['vN_est'] - df_merged['vN_true']
-    err_vU = df_merged['vU_est'] - df_merged['vU_true']
-    vel_rmse = np.sqrt(np.mean(err_vE**2 + err_vN**2 + err_vU**2))
+    if all(['vE_est' in df_merged, 'vN_est' in df_merged, 'vU_est' in df_merged]):
+        err_vE = df_merged['vE_est'] - df_merged['vE_true']
+        err_vN = df_merged['vN_est'] - df_merged['vN_true']
+        err_vU = df_merged['vU_est'] - df_merged['vU_true']
+        vel_rmse = np.sqrt(np.mean(err_vE**2 + err_vN**2 + err_vU**2))
+    else:
+        vel_rmse = 0
     
     return {
         'pos_rmse_3d': pos_rmse,

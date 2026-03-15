@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from coord_conversion import ecef_to_llh, _R_ecef_to_enu
+from coord_conversion import ecef_to_llh, R_ecef_to_enu
 
 @dataclass
 class WlsConfig:
@@ -45,7 +45,7 @@ def wls_epoch(df_epoch, x_prev, config: WlsConfig):
         lat, lon, _ = ecef_to_llh(rx[0], rx[1], rx[2])
         
         # 3.2 Получаем матрицу поворота из ECEF в локальную ENU в точке приемника
-        R_ecef2enu = _R_ecef_to_enu(lat, lon)
+        R_ecef2enu = R_ecef_to_enu(lat, lon)
         
         # 3.3 Переводим векторы "Приемник->Спутник" (dr) в ENU
         # dr имеет размер (N, 3), R - (3, 3). Транспонируем для умножения.
@@ -68,7 +68,8 @@ def wls_epoch(df_epoch, x_prev, config: WlsConfig):
         # Используем pinv для устойчивости, если матрица близка к вырожденной
         try:
             HtW = H.T @ W
-            Cov = np.linalg.inv(HtW @ H)
+            HtWH = HtW @ H
+            Cov = np.linalg.inv(HtWH)
             dx = Cov @ HtW @ dz
         except np.linalg.LinAlgError:
             # Если геометрия плохая (мало спутников или они на одной линии)

@@ -175,53 +175,41 @@ def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.D
 
 def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
     """
-    Визуализация результатов Взвешенного МНК (WLS) vs Истина.
-    Строит графики ошибок по координатам (ENU).
+    Рисует сравнение результатов МНК (WLS) с эталонной траекторией:
+    1. 3D график траектории.
+    2. Графики проекций по осям E, N, U.
     """
-    # Убедимся, что данные отсортированы
-    df_true = df_true.sort_values('t')
-    df_wls = df_wls.sort_values('t')
+    import matplotlib.pyplot as plt
+
+    # --- 1. 3D Траектория ---
+    fig3d = plt.figure(figsize=(10, 8))
+    ax3d = fig3d.add_subplot(111, projection='3d')
     
-    # Объединяем датафреймы по ближайшей временной метке (на случай рассинхрона частот)
-    # suffixes: _est для оценки (WLS), _true для истины
-    df_merged = pd.merge_asof(
-        df_wls, 
-        df_true[['t', 'E', 'N', 'U']], 
-        on='t', 
-        suffixes=('_est', '_true'), 
-        direction='nearest'
-    )
+    ax3d.plot(df_true['E'], df_true['N'], df_true['U'], label='Истинная траектория', color='black', linewidth=2)
+    ax3d.scatter(df_wls['E'], df_wls['N'], df_wls['U'], label='Оценка МНК (WLS)', color='green', s=15, alpha=0.7)
     
-    # Вычисляем ошибки позиционирования
-    df_merged['err_E'] = df_merged['E_est'] - df_merged['E_true']
-    df_merged['err_N'] = df_merged['N_est'] - df_merged['N_true']
-    df_merged['err_U'] = df_merged['U_est'] - df_merged['U_true']
+    ax3d.set_xlabel('East (м)')
+    ax3d.set_ylabel('North (м)')
+    ax3d.set_zlabel('Up (м)')
+    ax3d.set_title('Сравнение траекторий в 3D (WLS)')
+    ax3d.legend()
     
-    # Считаем 3D ошибку и HDOP/VDOP (из ковариации, если она есть в df_wls)
-    # Но пока просто построим ошибки координат
+    # --- 2. Графики проекций E, N, U ---
+    fig_pos, axs_pos = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    fig_pos.suptitle('Координаты E, N, U: Истина vs МНК', fontsize=16)
     
-    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-    fig.suptitle('Ошибки решения Взвешенного МНК (WLS Errors)', fontsize=16)
-    
-    cols = ['err_E', 'err_N', 'err_U']
-    titles = ['East Error', 'North Error', 'Up Error']
+    axes_labels = ['E', 'N', 'U']
+    wls_labels = ['E', 'N', 'U']
     colors = ['r', 'g', 'b']
     
-    for i, (col, title, color) in enumerate(zip(cols, titles, colors)):
-        rmse = np.sqrt((df_merged[col]**2).mean())
-        max_err = df_merged[col].abs().max()
+    for i, (axis, wls_axis, color) in enumerate(zip(axes_labels, wls_labels, colors)):
+        axs_pos[i].plot(df_true['t'], df_true[axis], label=f'Истина {axis}', color='black', linewidth=2)
+        axs_pos[i].scatter(df_wls['t'], df_wls[wls_axis], label=f'МНК {axis}', color=color, s=15, alpha=0.6)
         
-        ax = axes[i]
-        ax.plot(df_merged['t'], df_merged[col], color=color, label=f'Error', linewidth=1)
-        ax.axhline(0, color='black', linestyle='--', linewidth=0.5)
+        axs_pos[i].set_ylabel(f'{axis} (м)')
+        axs_pos[i].legend(loc='upper right')
+        axs_pos[i].grid(True)
         
-        # Добавляем статистику в легенду
-        ax.legend([f'RMSE: {rmse:.2f} m\nMax: {max_err:.2f} m'], loc='upper right')
-        
-        ax.set_ylabel('Ошибка [м]')
-        ax.set_title(title)
-        ax.grid(True)
-        
-    axes[2].set_xlabel('Время [с]')
+    axs_pos[2].set_xlabel('Время (с)')
     plt.tight_layout()
     plt.show()

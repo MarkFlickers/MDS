@@ -49,7 +49,12 @@ class LinearKalmanFilter(BaseKalmanFilter):
         self.update(z, self.H, self.R)
         return self.x.copy(), self.P.copy()
 
-class GNSSKalmanFilter(BaseKalmanFilter):
+class ExtendedKalmanFilter(BaseKalmanFilter):
+    """
+    Расширенный фильтр Калмана (EKF) для ЛР2.
+    Работает в системе координат ECEF.
+    Вектор состояния (8x1): [X, Y, Z, vX, vY, vZ, cb, cd]^T
+    """
     def __init__(self, dt: float, sigma_a: float, sigma_cb: float, sigma_cd: float, sigma_doppler: float, x0: np.ndarray, P0: np.ndarray):
         super().__init__(x0, P0)
         self.dt = dt
@@ -57,14 +62,14 @@ class GNSSKalmanFilter(BaseKalmanFilter):
         self.sigma_cb = sigma_cb
         self.sigma_cd = sigma_cd
         self.sigma_doppler = sigma_doppler
-        
+
         self.F = self._build_F(dt)
         self.Q = self._build_Q(dt)
 
     def _build_F(self, dt: float) -> np.ndarray:
         F = np.eye(8, dtype=float)
         F[0, 3] = F[1, 4] = F[2, 5] = dt
-        F[6, 7] = dt  # Интегрирование дрейфа часов (cd) в смещение (cb)
+        F[6, 7] = dt # Интегрирование дрейфа часов (cd) в смещение (cb)
         return F
 
     def _build_Q(self, dt: float) -> np.ndarray:
@@ -73,13 +78,13 @@ class GNSSKalmanFilter(BaseKalmanFilter):
             [(dt**4)/4, (dt**3)/2],
             [(dt**3)/2, dt**2]
         ]) * (self.sigma_a ** 2)
-        
+
         for i in range(3):
             Q[i, i] = q_block[0, 0]
             Q[i, i+3] = q_block[0, 1]
             Q[i+3, i] = q_block[1, 0]
             Q[i+3, i+3] = q_block[1, 1]
-            
+
         Q[6, 6] = (self.sigma_cb ** 2) * dt
         Q[7, 7] = (self.sigma_cd ** 2) * dt
         return Q
@@ -88,33 +93,37 @@ class GNSSKalmanFilter(BaseKalmanFilter):
         self.predict(self.F, self.Q)
 
     def update_wls(self, x_wls: np.ndarray, P_wls: np.ndarray):
-        z = np.asarray(x_wls, dtype=float).reshape(4, 1)
+        """Линейный апдейт по координатам от МНК (WLS)."""
+        z = np.asarray(x_wls, dtype=float).reshape(4,)
         H = np.zeros((4, 8), dtype=float)
         H[0, 0] = H[1, 1] = H[2, 2] = H[3, 6] = 1.0
         R = np.asarray(P_wls, dtype=float).copy() + np.eye(4)*1e-6
         self.update(z, H, R)
 
     def update_doppler(self, doppler: np.ndarray, sat_pos: np.ndarray, sat_vel: np.ndarray):
+        """Нелинейный (EKF) апдейт по сырым доплеровским измерениям."""
         m = doppler.shape[0]
         if m == 0: return
-            
+
         rx, v = self.x[0:3].flatten(), self.x[3:6].flatten()
         cd = self.x[7].item()
-        
+
         dr = sat_pos - rx
         rho = np.linalg.norm(dr, axis=1)
         los = dr / rho.reshape(-1, 1) # Line of sight векторы
-        
+
+        # Предсказанный доплер: h(x)
         dop_pred = np.sum(los * (sat_vel - v), axis=1) + cd
-        z = doppler.reshape(-1, 1)
-        y = z - dop_pred.reshape(-1, 1)
-        
+        z = doppler
+        y = z - dop_pred
+
+        # Матрица Якоби H
         H = np.zeros((m, 8), dtype=float)
         H[:, 3:6] = -los
         H[:, 7] = 1.0
         R = np.eye(m, dtype=float) * (self.sigma_doppler ** 2)
-        
-        # Стандартное обновление для доплера без повторного вызова базового update для удобства формирования y
+
+        # Обновление
         S = H @ self.P @ H.T + R
         K = self.P @ H.T @ np.linalg.inv(S)
         self.x = self.x + K @ y
