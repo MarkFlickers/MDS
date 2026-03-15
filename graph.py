@@ -213,3 +213,71 @@ def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
     axs_pos[2].set_xlabel('Время (с)')
     plt.tight_layout()
     plt.show()
+
+def plot_earth_and_satellites(sat_positions: np.ndarray, receiver_pos: np.ndarray):
+    """
+    Рисует 3D модель Земли (каркас/сферу) и распределение спутников в ECEF.
+    sat_positions: Массив (N, 3) координат спутников в метрах (ECEF)
+    receiver_pos: Массив (3,) координат приемника в метрах (ECEF)
+    """
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    # Радиус Земли в метрах
+    R_EARTH = 6371000.0
+
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # --- 1. Отрисовка сферы Земли (Wireframe) ---
+    # Создаем сетку сферических координат
+    u = np.linspace(0, 2 * np.pi, 40) # Долгота
+    v = np.linspace(0, np.pi, 20)     # Широта
+    x_sphere = R_EARTH * np.outer(np.cos(u), np.sin(v))
+    y_sphere = R_EARTH * np.outer(np.sin(u), np.sin(v))
+    z_sphere = R_EARTH * np.outer(np.ones(np.size(u)), np.cos(v))
+
+    # Рисуем поверхность Земли (полупрозрачную сетку, чтобы было видно насквозь)
+    ax.plot_wireframe(x_sphere, y_sphere, z_sphere, color='lightblue', linewidth=0.5, alpha=0.3)
+
+    # --- 2. Отрисовка Экватора и Нулевого меридиана для ориентира ---
+    theta = np.linspace(0, 2 * np.pi, 100)
+    ax.plot(R_EARTH * np.cos(theta), R_EARTH * np.sin(theta), np.zeros_like(theta), color='blue', alpha=0.5, label='Экватор')
+    ax.plot(R_EARTH * np.cos(theta), np.zeros_like(theta), R_EARTH * np.sin(theta), color='green', alpha=0.5, label='Нулевой меридиан (X-Z)')
+
+    # --- 3. Отрисовка спутников ---
+    ax.scatter(sat_positions[:, 0], sat_positions[:, 1], sat_positions[:, 2], 
+               color='red', s=30, label='Спутники ГНСС', depthshade=False)
+
+    # Для красоты можно нарисовать линии орбит (просто соединив спутники тонкими линиями к центру, или между собой)
+    for sat in sat_positions:
+        ax.plot([0, sat[0]], [0, sat[1]], [0, sat[2]], color='gray', linestyle='--', linewidth=0.3, alpha=0.5)
+
+    # --- 4. Отрисовка Приемника (пользователя) ---
+    ax.scatter(*receiver_pos, color='magenta', s=100, marker='*', label='Приемник (Машина)', depthshade=False)
+    # Рисуем вектор от центра земли к приемнику
+    ax.plot([0, receiver_pos[0]], [0, receiver_pos[1]], [0, receiver_pos[2]], color='magenta', linewidth=2)
+
+    # --- Настройка осей (Одинаковый масштаб для правильной геометрии сферы) ---
+    max_val = np.max(np.abs(sat_positions)) * 1.1 # Берем максимальный радиус орбиты
+    
+    ax.set_xlim([-max_val, max_val])
+    ax.set_ylim([-max_val, max_val])
+    ax.set_zlim([-max_val, max_val])
+
+    # Подписи осей
+    ax.set_xlabel('X (ECEF) [м]')
+    ax.set_ylabel('Y (ECEF) [м]')
+    ax.set_zlabel('Z (ECEF) [м]')
+    ax.set_title('Орбитальная группировка ГНСС и Земля (ECEF)', fontsize=14)
+    ax.legend(loc='upper right')
+
+    # Устанавливаем изометрический вид (важно для matplotlib 3D)
+    try:
+        ax.set_box_aspect([1, 1, 1])
+    except AttributeError:
+        pass # Для старых версий matplotlib
+
+    plt.tight_layout()
+    plt.show()
+    
