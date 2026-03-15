@@ -139,7 +139,7 @@ def simulate_gnss_raw(df_gnss_clean: pd.DataFrame, cfg: TrajectoryConfig) -> pd.
     # Увеличим число спутников до 24 аппаратно, чтобы после отсечения невидимых
     # всегда оставалось достаточно спутников (4+) для решения МНК.
     # Если в конфиге указано больше, используем значение из конфига.
-    total_sim_satellites = max(24, cfg.num_satellites)
+    total_sim_satellites = cfg.num_satellites
     
     # 2. Итерация по эпохам (времени)
     for i, row in df_gnss_clean.iterrows():
