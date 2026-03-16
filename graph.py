@@ -111,66 +111,99 @@ def plot_results(df_imu: pd.DataFrame, df_gnss_noisy: pd.DataFrame):
     plt.show()
 
 def plot_kf_comparison(df_true: pd.DataFrame, df_meas: pd.DataFrame, df_kf: pd.DataFrame, title_suffix: str = ""):
-    """
-    Отображает три окна с результатами фильтра Калмана:
-    1. 3D траектория.
-    2. Координаты E, N, U от времени.
-    3. Скорости vE, vN, vU от времени.
-    """
     import matplotlib.pyplot as plt
+    import numpy as np
+    
+    kf_E = 'E_est' if 'E_est' in df_kf.columns else 'E'
+    kf_N = 'N_est' if 'N_est' in df_kf.columns else 'N'
+    kf_U = 'U_est' if 'U_est' in df_kf.columns else 'U'
+    
+    kf_vE = 'vE_est' if 'vE_est' in df_kf.columns else 'vE'
+    kf_vN = 'vN_est' if 'vN_est' in df_kf.columns else 'vN'
+    kf_vU = 'vU_est' if 'vU_est' in df_kf.columns else 'vU'
 
-    # --- Окно 1: 3D Траектория ---
+    # Окно 1: 3D
     fig_3d = plt.figure(figsize=(10, 8))
     ax_3d = fig_3d.add_subplot(111, projection='3d')
     ax_3d.plot(df_true['E'], df_true['N'], df_true['U'], label='Истина', color='black', linewidth=2)
     ax_3d.scatter(df_meas['E'], df_meas['N'], df_meas['U'], label='GNSS Измерения', color='red', s=10, alpha=0.5)
-    
-    # Обрабатываем названия колонок (если они имеют суффикс _est)
-    kf_E = df_kf['E_est'] if 'E_est' in df_kf.columns else df_kf['E']
-    kf_N = df_kf['N_est'] if 'N_est' in df_kf.columns else df_kf['N']
-    kf_U = df_kf['U_est'] if 'U_est' in df_kf.columns else df_kf['U']
-    
-    ax_3d.plot(kf_E, kf_N, kf_U, label='Оценка ФК', color='blue', linewidth=2)
+    ax_3d.plot(df_kf[kf_E], df_kf[kf_N], df_kf[kf_U], label='Оценка ФК', color='blue', linewidth=2)
     ax_3d.set_xlabel('East (м)')
     ax_3d.set_ylabel('North (м)')
     ax_3d.set_zlabel('Up (м)')
     ax_3d.set_title(f'3D Траектория {title_suffix}')
     ax_3d.legend()
-    ax_3d.grid(True)
+    
+    # Для расчета ошибок сделаем простую интерполяцию истины к частоте фильтра
+    df_true_interp = pd.DataFrame({'t': df_kf['t']})
+    for col in ['E', 'N', 'U', 'vE', 'vN', 'vU']:
+        df_true_interp[col] = np.interp(df_kf['t'], df_true['t'], df_true[col])
+        
+    df_meas_interp = pd.DataFrame({'t': df_kf['t']})
+    for col in ['E', 'N', 'U']:
+        if col in df_meas.columns:
+            df_meas_interp[col] = np.interp(df_kf['t'], df_meas['t'], df_meas[col])
 
-    # --- Окно 2: Сравнение координат в проекциях E, N, U ---
-    fig_pos, axs_pos = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-    fig_pos.suptitle(f'Координаты (E, N, U) {title_suffix}', fontsize=16)
+    # Окно 2: Координаты и Ошибки (2 колонки)
+    fig_pos, axs_pos = plt.subplots(3, 2, figsize=(15, 10), sharex=True)
+    fig_pos.suptitle(f'Координаты и Ошибки {title_suffix}', fontsize=16)
     
-    axes_labels = ['E', 'N', 'U']
-    kf_labels = ['E_est', 'N_est', 'U_est'] if 'E_est' in df_kf.columns else axes_labels
+    axes = ['E', 'N', 'U']
+    kf_axes = [kf_E, kf_N, kf_U]
+    colors = ['r', 'g', 'b']
     
-    for i, (axis, kf_axis) in enumerate(zip(axes_labels, kf_labels)):
-        axs_pos[i].plot(df_true['t'], df_true[axis], label='Истина', color='black', linewidth=2)
-        axs_pos[i].scatter(df_meas['t'], df_meas[axis], label='GNSS', color='red', s=10, alpha=0.5)
-        axs_pos[i].plot(df_kf['t'], df_kf[kf_axis], label='ФК', color='blue', linewidth=2)
-        axs_pos[i].set_ylabel(f'{axis} (м)')
-        axs_pos[i].legend(loc='upper right')
-        axs_pos[i].grid(True)
-    axs_pos[2].set_xlabel('Время (с)')
+    for i, (ax_name, kf_col, c) in enumerate(zip(axes, kf_axes, colors)):
+        # Слева: Координаты
+        axs_pos[i, 0].plot(df_true['t'], df_true[ax_name], label='Истина', color='black', linewidth=2)
+        axs_pos[i, 0].scatter(df_meas['t'], df_meas[ax_name], label='GNSS', color='red', s=10, alpha=0.3)
+        axs_pos[i, 0].plot(df_kf['t'], df_kf[kf_col], label='ФК', color='blue', linewidth=2)
+        axs_pos[i, 0].set_ylabel(f'{ax_name} (м)')
+        axs_pos[i, 0].legend(loc='upper right')
+        axs_pos[i, 0].grid(True)
+        
+        # Справа: Ошибки
+        meas_err = df_meas_interp[ax_name] - df_true_interp[ax_name]
+        kf_err = df_kf[kf_col] - df_true_interp[ax_name]
+        
+        axs_pos[i, 1].scatter(df_kf['t'], meas_err, label='Ошибка GNSS', color='red', s=5, alpha=0.3)
+        axs_pos[i, 1].plot(df_kf['t'], kf_err, label='Ошибка ФК', color='blue', linewidth=1.5)
+        axs_pos[i, 1].axhline(0, color='black', linestyle='--', linewidth=1)
+        axs_pos[i, 1].set_ylabel('Ошибка (м)')
+        axs_pos[i, 1].legend(loc='upper right')
+        axs_pos[i, 1].grid(True)
+        
+    axs_pos[2, 0].set_xlabel('Время (с)')
+    axs_pos[2, 1].set_xlabel('Время (с)')
     plt.tight_layout()
+    
+    # Окно 3: Скорости и Ошибки (2 колонки)
+    fig_vel, axs_vel = plt.subplots(3, 2, figsize=(15, 10), sharex=True)
+    fig_vel.suptitle(f'Скорости и Ошибки {title_suffix}', fontsize=16)
+    
+    v_axes = ['vE', 'vN', 'vU']
+    kf_v_axes = [kf_vE, kf_vN, kf_vU]
+    
+    for i, (ax_name, kf_col, c) in enumerate(zip(v_axes, kf_v_axes, colors)):
+        # Слева: Значения скоростей
+        axs_vel[i, 0].plot(df_true['t'], df_true[ax_name], label='Истина', color='black', linewidth=2)
+        axs_vel[i, 0].plot(df_kf['t'], df_kf[kf_col], label='ФК', color='blue', linewidth=2)
+        axs_vel[i, 0].set_ylabel(f'{ax_name} (м/с)')
+        axs_vel[i, 0].legend(loc='upper right')
+        axs_vel[i, 0].grid(True)
+        
+        # Справа: Ошибки скоростей
+        kf_err = df_kf[kf_col] - df_true_interp[ax_name]
+        
+        axs_vel[i, 1].plot(df_kf['t'], kf_err, label='Ошибка ФК', color='blue', linewidth=1.5)
+        axs_vel[i, 1].axhline(0, color='black', linestyle='--', linewidth=1)
+        axs_vel[i, 1].set_ylabel('Ошибка (м/с)')
+        axs_vel[i, 1].legend(loc='upper right')
+        axs_vel[i, 1].grid(True)
 
-    # --- Окно 3: Сравнение скоростей vE, vN, vU ---
-    fig_vel, axs_vel = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-    fig_vel.suptitle(f'Скорости (vE, vN, vU) {title_suffix}', fontsize=16)
-    
-    vel_axes_labels = ['vE', 'vN', 'vU']
-    vel_kf_labels = ['vE_est', 'vN_est', 'vU_est'] if 'vE_est' in df_kf.columns else vel_axes_labels
-    
-    for i, (axis, kf_axis) in enumerate(zip(vel_axes_labels, vel_kf_labels)):
-        axs_vel[i].plot(df_true['t'], df_true[axis], label='Истина', color='black', linewidth=2)
-        axs_vel[i].plot(df_kf['t'], df_kf[kf_axis], label='ФК', color='blue', linewidth=2)
-        axs_vel[i].set_ylabel(f'{axis} (м/с)')
-        axs_vel[i].legend(loc='upper right')
-        axs_vel[i].grid(True)
-    axs_vel[2].set_xlabel('Время (с)')
+    axs_vel[2, 0].set_xlabel('Время (с)')
+    axs_vel[2, 1].set_xlabel('Время (с)')
     plt.tight_layout()
-
+    
     plt.show()
 
 def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
@@ -184,34 +217,56 @@ def plot_wls_results(df_true: pd.DataFrame, df_wls: pd.DataFrame):
     # --- 1. 3D Траектория ---
     fig3d = plt.figure(figsize=(10, 8))
     ax3d = fig3d.add_subplot(111, projection='3d')
-    
-    ax3d.plot(df_true['E'], df_true['N'], df_true['U'], label='Истинная траектория', color='black', linewidth=2)
-    ax3d.scatter(df_wls['E'], df_wls['N'], df_wls['U'], label='Оценка МНК (WLS)', color='green', s=15, alpha=0.7)
-    
+    ax3d.plot(df_true['E'], df_true['N'], df_true['U'], label='Истина', color='black', linewidth=2)
+    ax3d.scatter(df_wls['E'], df_wls['N'], df_wls['U'], label='Оценка МНК', color='green', s=15, alpha=0.7)
     ax3d.set_xlabel('East (м)')
     ax3d.set_ylabel('North (м)')
     ax3d.set_zlabel('Up (м)')
     ax3d.set_title('Сравнение траекторий в 3D (WLS)')
     ax3d.legend()
     
-    # --- 2. Графики проекций E, N, U ---
-    fig_pos, axs_pos = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-    fig_pos.suptitle('Координаты E, N, U: Истина vs МНК', fontsize=16)
+    # --- 2. Графики проекций и ошибок ---
+    fig_pos, axs_pos = plt.subplots(3, 2, figsize=(15, 10), sharex=True)
+    fig_pos.suptitle('Координаты E, N, U: МНК vs Истина и Ошибки', fontsize=16)
+    
+    df_merged = pd.merge_asof(df_wls, df_true, on='t', direction='nearest', suffixes=('_est', '_true'))
     
     axes_labels = ['E', 'N', 'U']
-    wls_labels = ['E', 'N', 'U']
     colors = ['r', 'g', 'b']
     
-    for i, (axis, wls_axis, color) in enumerate(zip(axes_labels, wls_labels, colors)):
-        axs_pos[i].plot(df_true['t'], df_true[axis], label=f'Истина {axis}', color='black', linewidth=2)
-        axs_pos[i].scatter(df_wls['t'], df_wls[wls_axis], label=f'МНК {axis}', color=color, s=15, alpha=0.6)
+    for i, (axis, color) in enumerate(zip(axes_labels, colors)):
+        # Слева: Координаты
+        axs_pos[i, 0].plot(df_merged['t'], df_merged[f'{axis}_true'], label='Истина', color='black', linewidth=2)
+        axs_pos[i, 0].scatter(df_merged['t'], df_merged[f'{axis}_est'], label='МНК', color=color, s=15, alpha=0.6)
+        axs_pos[i, 0].set_ylabel(f'{axis} (м)')
+        axs_pos[i, 0].legend(loc='upper right')
+        axs_pos[i, 0].grid(True)
         
-        axs_pos[i].set_ylabel(f'{axis} (м)')
-        axs_pos[i].legend(loc='upper right')
-        axs_pos[i].grid(True)
-        
-    axs_pos[2].set_xlabel('Время (с)')
+        # Справа: Ошибки
+        error = df_merged[f'{axis}_est'] - df_merged[f'{axis}_true']
+        axs_pos[i, 1].plot(df_merged['t'], error, label=f'Ошибка {axis}', color=color, linewidth=1.5)
+        axs_pos[i, 1].axhline(0, color='black', linestyle='--', linewidth=1)
+        axs_pos[i, 1].set_ylabel(f'Ошибка (м)')
+        axs_pos[i, 1].legend(loc='upper right')
+        axs_pos[i, 1].grid(True)
+
+    axs_pos[2, 0].set_xlabel('Время (с)')
+    axs_pos[2, 1].set_xlabel('Время (с)')
     plt.tight_layout()
+    
+    # --- 3. График DOP ---
+    # if 'HDOP' in df_wls.columns:
+    #     fig_dop, ax_dop = plt.subplots(figsize=(12, 4))
+    #     ax_dop.plot(df_wls['t'], df_wls['HDOP'], label='HDOP (Горизонт)', color='blue', linewidth=2)
+    #     ax_dop.plot(df_wls['t'], df_wls['VDOP'], label='VDOP (Вертикаль)', color='red', linewidth=2)
+    #     ax_dop.plot(df_wls['t'], df_wls['PDOP'], label='PDOP (Пространство)', color='green', linestyle='--', linewidth=2)
+    #     ax_dop.set_xlabel('Время (с)')
+    #     ax_dop.set_ylabel('Значение DOP')
+    #     ax_dop.set_title('Геометрический фактор потери точности (DOP)')
+    #     ax_dop.legend()
+    #     ax_dop.grid(True)
+    #     plt.tight_layout()
+
     plt.show()
 
 def plot_earth_and_satellites(sat_positions: np.ndarray, receiver_pos: np.ndarray, orbit_lines: list = None):

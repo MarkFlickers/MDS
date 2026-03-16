@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass
 from coord_conversion import ecef_to_llh, R_ecef_to_enu
+from metrics import calculate_dop
 
 @dataclass
 class WlsConfig:
@@ -84,5 +85,7 @@ def wls_epoch(df_epoch, x_prev, config: WlsConfig):
     # Результирующая ковариационная матрица оценки (Error Covariance)
     # P = (H^T W H)^-1
     P = np.linalg.inv(H.T @ W @ H)
-    
-    return x, P
+
+    dops = calculate_dop(H, lat, lon)  # Вычисляем DOP
+
+    return x, P, dops

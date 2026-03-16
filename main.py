@@ -101,42 +101,36 @@ def get_R(sigma_measurement: float) -> np.ndarray:
     return R
 
 def run_wls_solver(df_raw: pd.DataFrame, config: TrajectoryConfig) -> pd.DataFrame:
-    """Решает задачу позиционирования методом МНК (WLS)."""
     print("  -> Запуск взвешенного МНК (WLS)...")
     wls_cfg = WlsConfig()
-    
-    # Начальное приближение - референсная точка
+
     x_ref, y_ref, z_ref = enu_to_ecef(0.0, 0.0, 0.0, config.ref_lat, config.ref_lon, config.ref_alt)
     x0 = np.array([x_ref, y_ref, z_ref, 0.0], dtype=float)
     x_prev = x0.copy()
-    
+
     wls_rows = []
-    
+
     for t, g in df_raw.groupby('t'):
         g = g.reset_index(drop=True)
-        x_hat, P_hat = wls_epoch(g, x_prev, wls_cfg)
-        
+        x_hat, P_hat, dops = wls_epoch(g, x_prev, wls_cfg)  # Забираем DOP
+
         wls_rows.append({
             't': float(t),
             'X': x_hat[0], 'Y': x_hat[1], 'Z': x_hat[2], 'cb': x_hat[3],
-            'P00': P_hat[0, 0], 'P11': P_hat[1, 1], 'P22': P_hat[2, 2], 'P33': P_hat[3, 3]
+            'P00': P_hat[0, 0], 'P11': P_hat[1, 1], 'P22': P_hat[2, 2], 'P33': P_hat[3, 3],
+            'HDOP': dops['HDOP'], 'VDOP': dops['VDOP'], 'PDOP': dops['PDOP'] # Добавляем в датафрейм
         })
-        x_prev = x_hat # Warm start
-        
+        x_prev = x_hat 
+
     df_wls = pd.DataFrame(wls_rows)
-    
-    # Конвертация результатов МНК из ECEF обратно в ENU для сравнения
     enu_coords = [ecef_to_enu(r.X, r.Y, r.Z, config.ref_lat, config.ref_lon, config.ref_alt) for r in df_wls.itertuples()]
     df_wls['E'], df_wls['N'], df_wls['U'] = zip(*enu_coords)
-    
+
     return df_wls
 
-def run_linear_kf(df_wls: pd.DataFrame, config: TrajectoryConfig) -> pd.DataFrame:
+def run_linear_kf(df_wls: pd.DataFrame, config: TrajectoryConfig, sigma_a: float = 0.73) -> pd.DataFrame:
     """Запускает линейный ФК из ЛР1, используя ENU координаты от МНК в качестве измерений."""
-    print("  -> Запуск линейного ФК по координатам МНК...")
     
-    # Параметры фильтра (аналогично лучшим параметрам из ЛР1)
-    sigma_a = 0.73 
     Q = get_Q_continuous_white_noise(config.dt_gnss, sigma_a)
     R = get_R(config.gnss_pos_sigma)
     
@@ -162,74 +156,60 @@ def run_linear_kf(df_wls: pd.DataFrame, config: TrajectoryConfig) -> pd.DataFram
         
     return pd.DataFrame(kf_results)
 
-def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: TrajectoryConfig) -> pd.DataFrame:
-    """Запускает расширенный ФК (EKF) в системе координат ECEF."""
-    print("  -> Запуск Расширенного ФК (Позиция + Доплер)...")
-    
-    # Настройки доверия к модели (Process Noise)
-    sigma_a = 1.0          # Ускорение маневров (м/с^2)
-    sigma_cb = 0.5         # Шум смещения часов
-    sigma_cd = 0.05        # Шум дрейфа часов
-    
-    # Инициализация ECEF-координат (берем первую точку МНК)
+def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: TrajectoryConfig, sigma_a: float = 1.0) -> pd.DataFrame:
+    sigma_cb = 0.5 
+    sigma_cd = 0.05 
+
     row0 = df_wls.iloc[0]
     x0 = np.array([
         row0['X'], row0['Y'], row0['Z'], 
-        0.0, 0.0, 0.0,      # Начальная скорость (в ECEF)
-        row0['cb'], 0.0     # Часы
+        0.0, 0.0, 0.0, 
+        row0['cb'], 0.0 
     ])
-    
-    P0 = np.eye(8) * 100.0 # Большая начальная неопределенность
-    
+
+    P0 = np.eye(8) * 100.0 
+
     ekf = ExtendedKalmanFilter(
         dt=config.dt_gnss,
         sigma_a=sigma_a, sigma_cb=sigma_cb, sigma_cd=sigma_cd,
         sigma_doppler=config.raw_doppler_sigma,
         x0=x0, P0=P0
     )
-    
+
     ekf_results = []
-    
-    # Синхронный проход по эпохам МНК и Сырых данных
     for t in df_wls['t'].values:
         ekf.predict_step()
-        
-        # 1. Update WLS (Позиция)
+
         wls_row = df_wls[df_wls['t'] == t].iloc[0]
         x_wls = np.array([wls_row['X'], wls_row['Y'], wls_row['Z'], wls_row['cb']])
         P_wls = np.diag([wls_row['P00'], wls_row['P11'], wls_row['P22'], wls_row['P33']])
         ekf.update_wls(x_wls, P_wls)
-        
-        # 2. Update Doppler (Скорость)
+
         raw_epoch = df_raw[df_raw['t'] == t]
         if len(raw_epoch) > 0:
             doppler = raw_epoch['doppler'].values
             sat_pos = raw_epoch[['sat_X', 'sat_Y', 'sat_Z']].values
             sat_vel = raw_epoch[['sat_vX', 'sat_vY', 'sat_vZ']].values
             ekf.update_doppler(doppler, sat_pos, sat_vel)
-            
-        # 3. Сохранение и конвертация в ENU
+
         x_est = ekf.x.flatten()
-        
-        # Конвертация координат ECEF -> ENU
         E, N, U = ecef_to_enu(x_est[0], x_est[1], x_est[2], config.ref_lat, config.ref_lon, config.ref_alt)
-        
-        # Конвертация скорости ECEF -> ENU (нужна матрица поворота)
+
         lat, lon = config.ref_lat, config.ref_lon
         R_ecef2enu = np.array([
-            [-np.sin(lon),               np.cos(lon),              0],
+            [-np.sin(lon),              np.cos(lon),             0],
             [-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)],
             [ np.cos(lat)*np.cos(lon),  np.cos(lat)*np.sin(lon), np.sin(lat)]
         ])
         v_ecef = np.array([x_est[3], x_est[4], x_est[5]])
         v_enu = R_ecef2enu @ v_ecef
-        
+
         ekf_results.append({
             't': t,
             'E_est': E, 'N_est': N, 'U_est': U,
             'vE_est': v_enu[0], 'vN_est': v_enu[1], 'vU_est': v_enu[2]
         })
-        
+
     return pd.DataFrame(ekf_results)
 
 
@@ -304,37 +284,54 @@ def run_lab01(df_true, df_meas, config):
 def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryConfig):
     print("\n--- Lab 02: GNSS WLS & Extended KF ---")
     
-    # Для метрик переименуем колонки истины, чтобы они совпадали с требованиями calculate_rmse
     df_true_renamed = df_true[['t', 'E', 'N', 'U', 'vE', 'vN', 'vU']].rename(columns={
         'E': 'E_true', 'N': 'N_true', 'U': 'U_true',
         'vE': 'vE_true', 'vN': 'vN_true', 'vU': 'vU_true'
     })
     
-    # Отрисовка геометрии орбит в момент t=0
     show_satellite_positions(df_true, config)
-
-    # --- Шаг 1: Решение МНК (WLS) ---
+    
+    # --- Шаг 1: МНК ---
     df_wls = run_wls_solver(df_raw, config)
     metrics_wls = calculate_rmse(df_true_renamed, df_wls.rename(columns={'E':'E_est', 'N':'N_est', 'U':'U_est'}))
-    print(f"  [WLS] RMSE Позиции (3D): {metrics_wls['pos_rmse_3d']:.3f} м")
+    print(f" [WLS] RMSE Позиции (3D): {metrics_wls['pos_rmse_3d']:.3f} м")
+    print(f" [WLS] Средний HDOP: {df_wls['HDOP'].mean():.2f}, VDOP: {df_wls['VDOP'].mean():.2f}")
     
     plot_wls_results(df_true, df_wls)
     
-    # --- Шаг 2: Линейный ФК (по координатам от МНК) ---
-    df_kf_linear = run_linear_kf(df_wls, config)
-    metrics_lin = calculate_rmse(df_true_renamed, df_kf_linear)
-    print(f"  [Linear KF] RMSE Позиции (3D): {metrics_lin['pos_rmse_3d']:.3f} м, Скорости: {metrics_lin['vel_rmse_3d']:.3f} м/с")
+    # --- Шаг 2: Линейный ФК ---
+    print("\n [Linear KF] Подбор параметра sigma_a (доверие модели):")
+    test_sigmas = [0.01, 0.1, 0.5, 0.7, 0.8, 0.9, 1.0, 5.0, 10.0]
+    best_df_kf_lin = None
+    best_rmse = 999999.9
     
-    # Переименуем колонки МНК для функции плоттера (чтобы отображались как "GNSS измерения")
-    # df_wls_meas = df_wls.rename(columns={'E': 'E_meas', 'N': 'N_meas', 'U': 'U_meas'})
-    plot_kf_comparison(df_true, df_wls, df_kf_linear, title_suffix="(Линейный ФК по МНК)")
+    for sa in test_sigmas:
+        df_kf_linear = run_linear_kf(df_wls, config, sigma_a=sa)
+        met = calculate_rmse(df_true_renamed, df_kf_linear)
+        print(f"LKF -> sigma_a = {sa:4.2f} | RMSE Позиции: {met['pos_rmse_3d']:.3f} м | Скорости: {met['vel_rmse_3d']:.3f} м/с")
+        
+        if met['pos_rmse_3d'] < best_rmse:
+            best_rmse = met['pos_rmse_3d']
+            best_df_kf_lin = df_kf_linear
     
-    # --- Шаг 3: Расширенный ФК (EKF: Позиция + Доплер) ---
-    df_kf_extended = run_extended_gnss_kf(df_raw, df_wls, config)
-    metrics_ext = calculate_rmse(df_true_renamed, df_kf_extended)
-    print(f"  [Extended KF] RMSE Позиции (3D): {metrics_ext['pos_rmse_3d']:.3f} м, Скорости: {metrics_ext['vel_rmse_3d']:.3f} м/с")
+    plot_kf_comparison(df_true, df_wls, best_df_kf_lin, title_suffix="(Линейный ФК по МНК)")
     
-    plot_kf_comparison(df_true, df_wls, df_kf_extended, title_suffix="(Расширенный ФК: ECEF + Доплер)")
+    # --- Шаг 3: Расширенный ФК с перебором параметров ---
+    print("\n [Extended KF] Подбор параметра sigma_a (доверие модели):")
+    test_sigmas = [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.73, 1.0, 5.0, 10.0]
+    best_df_kf_ext = None
+    best_rmse = 999999.9
+    
+    for sa in test_sigmas:
+        df_kf_ext_temp = run_extended_gnss_kf(df_raw, df_wls, config, sigma_a=sa)
+        met = calculate_rmse(df_true_renamed, df_kf_ext_temp)
+        print(f"EKF -> sigma_a = {sa:4.2f} | RMSE Позиции: {met['pos_rmse_3d']:.3f} м | Скорости: {met['vel_rmse_3d']:.3f} м/с")
+        
+        if met['pos_rmse_3d'] < best_rmse:
+            best_rmse = met['pos_rmse_3d']
+            best_df_kf_ext = df_kf_ext_temp
+            
+    plot_kf_comparison(df_true, df_wls, best_df_kf_ext, title_suffix="(Расширенный ФК: МНК + Доплер)")
 
 # ==========================================
 # Лабораторная работа №3: Слабосвязанная ИНС/ГНСС
