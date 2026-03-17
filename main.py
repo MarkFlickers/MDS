@@ -3,7 +3,7 @@ import numpy as np
 from configuration import TrajectoryConfig, stages_scenario
 from trajectory import generate_trajectory, simulate_imu_errors
 from gnss import process_gnss, simulate_gnss_raw
-from graph import plot_kf_comparison, plot_wls_results
+from graph import plot_results, plot_kf_comparison, plot_wls_results
 from metrics import calculate_rmse
 from kalman import LinearKalmanFilter, ExtendedKalmanFilter
 from coord_conversion import ecef_to_enu, enu_to_ecef
@@ -355,8 +355,8 @@ def run_lab04():
 if __name__ == "__main__":
     config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
     
-    #plot_results(df_imu_clean, df_gnss_noisy)
-    #run_lab01(df_gnss_clean, df_gnss_noisy, config)
+    plot_results(df_imu_clean, df_gnss_noisy)
+    run_lab01(df_gnss_clean, df_gnss_noisy, config)
     run_lab02(df_gnss_raw, df_gnss_clean, config)
     #run_lab03()
     #run_lab04()
