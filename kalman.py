@@ -128,3 +128,82 @@ class ExtendedKalmanFilter(BaseKalmanFilter):
         K = self.P @ H.T @ np.linalg.inv(S)
         self.x = self.x + K @ y
         self.P = (self.I - K @ H) @ self.P
+
+class InsErrorStateKalmanFilter(BaseKalmanFilter):
+    """
+    15-состояний фильтр Калмана в пространстве ошибок для ЛР3.
+    Вектор состояния:
+      [dr, dv, dtheta, dba, dbg]^T
+    где
+      dr     - ошибки положения ENU,
+      dv     - ошибки скорости ENU,
+      dtheta - малые ошибки ориентации,
+      dba    - ошибки смещений акселерометров,
+      dbg    - ошибки дрейфов гироскопов.
+    """
+    def __init__(
+        self,
+        sigma_accel: float,
+        sigma_gyro: float,
+        sigma_accel_bias: float,
+        sigma_gyro_bias: float,
+        P0: np.ndarray,
+    ):
+        super().__init__(x0=np.zeros(15, dtype=float), P0=P0)
+        self.sigma_accel = float(sigma_accel)
+        self.sigma_gyro = float(sigma_gyro)
+        self.sigma_accel_bias = float(sigma_accel_bias)
+        self.sigma_gyro_bias = float(sigma_gyro_bias)
+
+    @staticmethod
+    def _skew(v: np.ndarray) -> np.ndarray:
+        vx, vy, vz = np.asarray(v, dtype=float)
+        return np.array([
+            [0.0, -vz,  vy],
+            [vz,  0.0, -vx],
+            [-vy, vx,  0.0],
+        ], dtype=float)
+
+    def _build_F(self, C_nb: np.ndarray, f_b_corr: np.ndarray, w_b_corr: np.ndarray, dt: float) -> np.ndarray:
+        F_c = np.zeros((15, 15), dtype=float)
+        F_c[0:3, 3:6] = np.eye(3)
+        F_c[3:6, 6:9] = -C_nb @ self._skew(f_b_corr)
+        F_c[3:6, 9:12] = -C_nb
+        F_c[6:9, 6:9] = -self._skew(w_b_corr)
+        F_c[6:9, 12:15] = -np.eye(3)
+        return np.eye(15, dtype=float) + F_c * dt
+
+    def _build_Q(self, C_nb: np.ndarray, dt: float) -> np.ndarray:
+        G = np.zeros((15, 12), dtype=float)
+        G[3:6, 0:3] = C_nb
+        G[6:9, 3:6] = -np.eye(3)
+        G[9:12, 6:9] = np.eye(3)
+        G[12:15, 9:12] = np.eye(3)
+
+        q_diag = np.concatenate([
+            np.full(3, self.sigma_accel ** 2),
+            np.full(3, self.sigma_gyro ** 2),
+            np.full(3, self.sigma_accel_bias ** 2),
+            np.full(3, self.sigma_gyro_bias ** 2),
+        ])
+        Q_c = np.diag(q_diag)
+        return G @ Q_c @ G.T * dt
+
+    def predict_ins(self, C_nb: np.ndarray, f_b_corr: np.ndarray, w_b_corr: np.ndarray, dt: float):
+        F = self._build_F(C_nb=C_nb, f_b_corr=f_b_corr, w_b_corr=w_b_corr, dt=dt)
+        Q = self._build_Q(C_nb=C_nb, dt=dt)
+        self.predict(F, Q)
+
+    def update_position(self, z: np.ndarray, R: np.ndarray, C_nb: np.ndarray | None = None, lever_arm: np.ndarray | None = None):
+        H = np.zeros((3, 15), dtype=float)
+        H[:, 0:3] = np.eye(3)
+
+        if lever_arm is not None and C_nb is not None:
+            H[:, 6:9] = -C_nb @ self._skew(lever_arm)
+
+        self.update(np.asarray(z, dtype=float).reshape(3,), H, np.asarray(R, dtype=float))
+        return H
+
+    def reset_error_state(self):
+        self.x[:] = 0.0
+        self.P = 0.5 * (self.P + self.P.T)

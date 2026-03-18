@@ -3,9 +3,10 @@ import numpy as np
 from configuration import TrajectoryConfig, stages_scenario
 from trajectory import generate_trajectory, simulate_imu_errors
 from gnss import process_gnss, simulate_gnss_raw
-from graph import plot_results, plot_kf_comparison, plot_wls_results
+from graph import plot_results, plot_kf_comparison, plot_wls_results, plot_nav_solution_comparison
 from metrics import calculate_rmse
 from kalman import LinearKalmanFilter, ExtendedKalmanFilter
+from ins import mechanize_ins, run_loosely_coupled_ins_gnss
 from coord_conversion import ecef_to_enu, enu_to_ecef
 from wls import WlsConfig, wls_epoch
 from data_io import save_trajectories, save_metadata
@@ -336,12 +337,93 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
 # ==========================================
 # Лабораторная работа №3: Слабосвязанная ИНС/ГНСС
 # ==========================================
-def run_lab03():
-    print("\n--- Lab 03: Loosely Coupled INS/GNSS ---")
-    # 1. Механизация ИНС (Strapdown)
-    # 2. 15-мерный фильтр Калмана в пространстве ошибок (15-state Error KF)
-    # 3. Обновление по позиции и скорости от GNSS, учет lever arm
-    print("Структура для ЛР3 готова. Ожидает реализации механизации и 15-мерного состояния.")
+def run_lab03(
+    df_ref: pd.DataFrame,
+    df_gnss_meas: pd.DataFrame,
+    df_imu_noisy: pd.DataFrame,
+    config: TrajectoryConfig,
+    gnss_pos_sigma: float | None = None,
+    accel_bias_rw_sigma: float = 1e-3,
+    gyro_bias_rw_sigma: float = 1e-4,
+    plot_enabled: bool = True,
+):
+    print("--- Lab 03: Loosely Coupled INS/GNSS ---")
+
+    gnss_pos_sigma = config.gnss_pos_sigma if gnss_pos_sigma is None else gnss_pos_sigma
+
+    df_ref_nav = df_ref[['t', 'E_imu', 'N_imu', 'U_imu', 'vE', 'vN', 'vU', 'roll', 'pitch', 'yaw', 'q_w', 'q_x', 'q_y', 'q_z', 'E_ant', 'N_ant', 'U_ant']].copy()
+
+    row_gnss0 = df_gnss_meas.iloc[0]
+    row_ref0 = df_ref.iloc[0]
+    init_pos = row_gnss0[['E', 'N', 'U']].to_numpy(dtype=float)
+    init_vel = row_gnss0[['vE', 'vN', 'vU']].to_numpy(dtype=float) if all(col in df_gnss_meas.columns for col in ['vE', 'vN', 'vU']) else np.zeros(3)
+    init_quat = row_ref0[['q_w', 'q_x', 'q_y', 'q_z']].to_numpy(dtype=float)
+
+    print(" -> Автономная ИНС-механизация...")
+    df_ins = mechanize_ins(
+        df_imu=df_imu_noisy,
+        cfg=config,
+        init_pos=init_pos,
+        init_vel=init_vel,
+        init_quat=init_quat,
+    )
+
+    df_true_rmse = df_ref_nav[['t', 'E_imu', 'N_imu', 'U_imu', 'vE', 'vN', 'vU']].rename(columns={
+        'E_imu': 'E_true', 'N_imu': 'N_true', 'U_imu': 'U_true',
+        'vE': 'vE_true', 'vN': 'vN_true', 'vU': 'vU_true'
+    })
+
+    df_ins_rmse = df_ins[['t', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est']].copy()
+    metrics_ins = calculate_rmse(df_true_rmse, df_ins_rmse)
+    print(f"Автономная ИНС: RMSE позиции = {metrics_ins['pos_rmse_3d']:.3f} м, RMSE скорости = {metrics_ins['vel_rmse_3d']:.3f} м/с")
+
+    if plot_enabled:
+        plot_nav_solution_comparison(df_ref_nav, df_ins, df_gnss=df_gnss_meas, title_suffix='(автономная ИНС)')
+
+    print(" -> ESKF без учета lever arm...")
+    df_eskf_noarm = run_loosely_coupled_ins_gnss(
+        df_imu=df_imu_noisy,
+        df_gnss=df_gnss_meas,
+        df_ref=df_ref,
+        cfg=config,
+        use_lever_arm=False,
+        gnss_pos_sigma=gnss_pos_sigma,
+        accel_bias_rw_sigma=accel_bias_rw_sigma,
+        gyro_bias_rw_sigma=gyro_bias_rw_sigma,
+    )
+    df_eskf_noarm_rmse = df_eskf_noarm[['t', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est']].copy()
+    metrics_eskf_noarm = calculate_rmse(df_true_rmse, df_eskf_noarm_rmse)
+    print(f"ESKF без lever arm: RMSE позиции = {metrics_eskf_noarm['pos_rmse_3d']:.3f} м, RMSE скорости = {metrics_eskf_noarm['vel_rmse_3d']:.3f} м/с")
+
+    if plot_enabled:
+        plot_nav_solution_comparison(df_ref_nav, df_eskf_noarm, df_gnss=df_gnss_meas, title_suffix='(ESKF без lever arm)')
+
+    print(" -> ESKF с учетом lever arm...")
+    df_eskf_arm = run_loosely_coupled_ins_gnss(
+        df_imu=df_imu_noisy,
+        df_gnss=df_gnss_meas,
+        df_ref=df_ref,
+        cfg=config,
+        use_lever_arm=True,
+        gnss_pos_sigma=gnss_pos_sigma,
+        accel_bias_rw_sigma=accel_bias_rw_sigma,
+        gyro_bias_rw_sigma=gyro_bias_rw_sigma,
+    )
+    df_eskf_arm_rmse = df_eskf_arm[['t', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est']].copy()
+    metrics_eskf_arm = calculate_rmse(df_true_rmse, df_eskf_arm_rmse)
+    print(f"ESKF с lever arm: RMSE позиции = {metrics_eskf_arm['pos_rmse_3d']:.3f} м, RMSE скорости = {metrics_eskf_arm['vel_rmse_3d']:.3f} м/с")
+
+    if plot_enabled:
+        plot_nav_solution_comparison(df_ref_nav, df_eskf_arm, df_gnss=df_gnss_meas, title_suffix='(ESKF с lever arm)')
+
+    return {
+        'df_ins': df_ins,
+        'df_eskf_noarm': df_eskf_noarm,
+        'df_eskf_arm': df_eskf_arm,
+        'metrics_ins': metrics_ins,
+        'metrics_eskf_noarm': metrics_eskf_noarm,
+        'metrics_eskf_arm': metrics_eskf_arm,
+    }
 
 # ==========================================
 # Лабораторная работа №4: Сильносвязанная ИНС/ГНСС
@@ -355,8 +437,8 @@ def run_lab04():
 if __name__ == "__main__":
     config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
     
-    plot_results(df_imu_clean, df_gnss_noisy)
-    run_lab01(df_gnss_clean, df_gnss_noisy, config)
-    run_lab02(df_gnss_raw, df_gnss_clean, config)
-    #run_lab03()
-    #run_lab04()
+    #plot_results(df_imu_clean, df_gnss_noisy)
+    #run_lab01(df_gnss_clean, df_gnss_noisy, config)
+    #run_lab02(df_gnss_raw, df_gnss_clean, config)
+    run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
+    # run_lab04()
