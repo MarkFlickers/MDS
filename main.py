@@ -248,6 +248,8 @@ def run_lab01(df_true, df_meas, config):
     P0[0:3, 0:3] *= (config.gnss_pos_sigma ** 2)
     P0[3:6, 3:6] *= 100.0
     R = get_R(config.gnss_pos_sigma)
+    best_df_kf = None
+    best_rmse = 999999.9
     for sigma_a in test_sigmas:
         for Q in [get_Q_continuous_white_noise(config.dt_gnss, sigma_a), get_Q_piecewise_white_noise(config.dt_gnss, sigma_a)]:
             kf = LinearKalmanFilter(
@@ -270,6 +272,9 @@ def run_lab01(df_true, df_meas, config):
 
             df_kf = pd.DataFrame(kf_results)
             metrics = calculate_rmse(df_true_renamed, df_kf)
+            if metrics['pos_rmse_3d'] < best_rmse:
+                best_rmse = metrics['pos_rmse_3d']
+                best_df_kf = df_kf
             if np.array_equal(Q, get_Q_continuous_white_noise(config.dt_gnss, sigma_a)) :
                 print("Модель непрерывного белого шума, ", end="")
             elif np.array_equal(Q, get_Q_piecewise_white_noise(config.dt_gnss, sigma_a)):
@@ -277,7 +282,7 @@ def run_lab01(df_true, df_meas, config):
             print(f"СКО неучтённого ускорения = {sigma_a}: Ошибка Координаты = {metrics['pos_rmse_3d']:.3f} м, ошибка скорости = {metrics['vel_rmse_3d']:.3f} м/с")
 
             # plot_kf_comparison(df_true, df_meas, df_kf)
-        plot_kf_comparison(df_true, df_meas, df_kf)
+    plot_kf_comparison(df_true, df_meas, best_df_kf)
 
 # ==========================================
 # Лабораторная работа №2: Псевдодальности и WLS
