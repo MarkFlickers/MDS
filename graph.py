@@ -427,12 +427,29 @@ def plot_nav_solution_comparison(
     for key, col in ref.items():
         ref_interp[key] = np.interp(t_est, t_ref, df_ref[col].to_numpy(dtype=float))
 
+    gnss_err = None
+    if df_gnss is not None:
+        t_gnss = df_gnss['t'].to_numpy(dtype=float)
+        gnss_err = pd.DataFrame({'t': t_gnss})
+        for key in ['E', 'N', 'U']:
+            ref_gnss = np.interp(t_gnss, t_ref, df_ref[ref[key]].to_numpy(dtype=float))
+            gnss_err[key] = df_gnss[key].to_numpy(dtype=float) - ref_gnss
+
     fig_3d = plt.figure(figsize=(10, 8))
     ax_3d = fig_3d.add_subplot(111, projection='3d')
-    ax_3d.plot(df_ref[ref['E']], df_ref[ref['N']], df_ref[ref['U']], color='black', linewidth=2.0, label='Эталон')
+    ax_3d.plot(
+        df_ref[ref['E']], df_ref[ref['N']], df_ref[ref['U']],
+        color='black', linewidth=2.0, label='Эталон'
+    )
     if df_gnss is not None:
-        ax_3d.scatter(df_gnss['E'], df_gnss['N'], df_gnss['U'], color='red', s=10, alpha=0.5, label='GNSS')
-    ax_3d.plot(df_est[est['E']], df_est[est['N']], df_est[est['U']], color='blue', linewidth=2.0, label='Оценка')
+        ax_3d.scatter(
+            df_gnss['E'], df_gnss['N'], df_gnss['U'],
+            color='red', s=10, alpha=0.5, label='GNSS'
+        )
+    ax_3d.plot(
+        df_est[est['E']], df_est[est['N']], df_est[est['U']],
+        color='blue', linewidth=2.0, label='Оценка'
+    )
     ax_3d.set_xlabel('East [м]')
     ax_3d.set_ylabel('North [м]')
     ax_3d.set_zlabel('Up [м]')
@@ -450,54 +467,50 @@ def plot_nav_solution_comparison(
     pos_keys = ['E', 'N', 'U']
     vel_keys = ['vE', 'vN', 'vU']
     att_keys = ['roll', 'pitch', 'yaw']
-    colors = ['tab:red', 'tab:green', 'tab:blue']
 
     fig_pos, ax_pos = plt.subplots(3, 2, figsize=(15, 10), sharex='col')
     fig_pos.suptitle(f'Позиция и ошибки {title_suffix}', fontsize=14)
-    for i, (key, color) in enumerate(zip(pos_keys, colors)):
+    for i, key in enumerate(pos_keys):
         ax_pos[i, 0].plot(df_ref['t'], df_ref[ref[key]], color='black', linewidth=2.0, label='Эталон')
         if df_gnss is not None:
-            ax_pos[i, 0].scatter(df_gnss['t'], df_gnss[key], color='red', s=10, alpha=0.4, label='GNSS')
-        ax_pos[i, 0].plot(df_est['t'], df_est[est[key]], color=color, linewidth=1.8, label='Оценка')
+            ax_pos[i, 0].scatter(df_gnss['t'], df_gnss[key], color='red', s=10, alpha=0.5, label='GNSS')
+        ax_pos[i, 0].plot(df_est['t'], df_est[est[key]], color='blue', linewidth=1.8, label='Оценка')
         ax_pos[i, 0].set_ylabel(f'{key} [м]')
         ax_pos[i, 0].grid(True)
-        if i == 0:
-            ax_pos[i, 0].legend(loc='upper right')
+        ax_pos[i, 0].legend(loc='upper right')
 
         err_est = df_est[est[key]].to_numpy(dtype=float) - ref_interp[key].to_numpy(dtype=float)
-        ax_pos[i, 1].plot(df_est['t'], err_est, color=color, linewidth=1.8, label='Ошибка оценки')
-        if df_gnss is not None:
-            gnss_interp = np.interp(t_est, df_gnss['t'].to_numpy(dtype=float), df_gnss[key].to_numpy(dtype=float))
-            ax_pos[i, 1].scatter(df_est['t'], gnss_interp - ref_interp[key].to_numpy(dtype=float), color='red', s=8, alpha=0.25, label='Ошибка GNSS')
+        ax_pos[i, 1].plot(df_est['t'], err_est, color='blue', linewidth=1.8, label='Ошибка оценки')
+        if gnss_err is not None:
+            ax_pos[i, 1].scatter(gnss_err['t'], gnss_err[key], color='red', s=12, alpha=0.45, label='Ошибка GNSS')
         ax_pos[i, 1].axhline(0.0, color='black', linestyle='--', linewidth=1.0)
         ax_pos[i, 1].set_ylabel(f'Δ{key} [м]')
         ax_pos[i, 1].grid(True)
-        if i == 0:
-            ax_pos[i, 1].legend(loc='upper right')
+        ax_pos[i, 1].legend(loc='upper right')
     ax_pos[2, 0].set_xlabel('Время [с]')
     ax_pos[2, 1].set_xlabel('Время [с]')
 
     fig_vel, ax_vel = plt.subplots(3, 2, figsize=(15, 10), sharex='col')
     fig_vel.suptitle(f'Скорость и ошибки {title_suffix}', fontsize=14)
-    for i, (key, color) in enumerate(zip(vel_keys, colors)):
+    for i, key in enumerate(vel_keys):
         ax_vel[i, 0].plot(df_ref['t'], df_ref[ref[key]], color='black', linewidth=2.0, label='Эталон')
-        ax_vel[i, 0].plot(df_est['t'], df_est[est[key]], color=color, linewidth=1.8, label='Оценка')
+        ax_vel[i, 0].plot(df_est['t'], df_est[est[key]], color='blue', linewidth=1.8, label='Оценка')
         ax_vel[i, 0].set_ylabel(f'{key} [м/с]')
         ax_vel[i, 0].grid(True)
-        if i == 0:
-            ax_vel[i, 0].legend(loc='upper right')
+        ax_vel[i, 0].legend(loc='upper right')
 
         err_est = df_est[est[key]].to_numpy(dtype=float) - ref_interp[key].to_numpy(dtype=float)
-        ax_vel[i, 1].plot(df_est['t'], err_est, color=color, linewidth=1.8)
+        ax_vel[i, 1].plot(df_est['t'], err_est, color='blue', linewidth=1.8, label='Ошибка оценки')
         ax_vel[i, 1].axhline(0.0, color='black', linestyle='--', linewidth=1.0)
         ax_vel[i, 1].set_ylabel(f'Δ{key} [м/с]')
         ax_vel[i, 1].grid(True)
+        ax_vel[i, 1].legend(loc='upper right')
     ax_vel[2, 0].set_xlabel('Время [с]')
     ax_vel[2, 1].set_xlabel('Время [с]')
 
     fig_att, ax_att = plt.subplots(3, 2, figsize=(15, 10), sharex='col')
     fig_att.suptitle(f'Ориентация и ошибки {title_suffix}', fontsize=14)
-    for i, (key, color) in enumerate(zip(att_keys, colors)):
+    for i, key in enumerate(att_keys):
         ref_deg = np.degrees(df_ref[ref[key]].to_numpy(dtype=float))
         est_deg = np.degrees(df_est[est[key]].to_numpy(dtype=float))
         ref_interp_rad = ref_interp[key].to_numpy(dtype=float)
@@ -505,16 +518,16 @@ def plot_nav_solution_comparison(
         err_deg = np.degrees(_angle_diff_rad(est_rad, ref_interp_rad))
 
         ax_att[i, 0].plot(df_ref['t'], ref_deg, color='black', linewidth=2.0, label='Эталон')
-        ax_att[i, 0].plot(df_est['t'], est_deg, color=color, linewidth=1.8, label='Оценка')
+        ax_att[i, 0].plot(df_est['t'], est_deg, color='blue', linewidth=1.8, label='Оценка')
         ax_att[i, 0].set_ylabel(f'{key} [град]')
         ax_att[i, 0].grid(True)
-        if i == 0:
-            ax_att[i, 0].legend(loc='upper right')
+        ax_att[i, 0].legend(loc='upper right')
 
-        ax_att[i, 1].plot(df_est['t'], err_deg, color=color, linewidth=1.8)
+        ax_att[i, 1].plot(df_est['t'], err_deg, color='blue', linewidth=1.8, label='Ошибка оценки')
         ax_att[i, 1].axhline(0.0, color='black', linestyle='--', linewidth=1.0)
         ax_att[i, 1].set_ylabel(f'Δ{key} [град]')
         ax_att[i, 1].grid(True)
+        ax_att[i, 1].legend(loc='upper right')
     ax_att[2, 0].set_xlabel('Время [с]')
     ax_att[2, 1].set_xlabel('Время [с]')
 
