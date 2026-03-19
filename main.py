@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from configuration import TrajectoryConfig, stages_scenario
+from configuration import TrajectoryConfig, stages_scenario, stages_scenario_hard
 from trajectory import generate_trajectory, simulate_imu_errors
 from gnss import process_gnss, simulate_gnss_raw
 from graph import plot_results, plot_kf_comparison, plot_wls_results, plot_nav_solution_comparison
@@ -219,7 +219,7 @@ def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: Tra
 # ==========================================
 def generate_all_data():
     config = TrajectoryConfig()
-    df_imu_clean = generate_trajectory(config, stages_scenario)
+    df_imu_clean = generate_trajectory(config, stages_scenario_hard)
     df_imu_noisy = simulate_imu_errors(df_imu_clean, config)
     df_gnss_clean, df_gnss_noisy = process_gnss(df_imu_clean, config)
     df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
@@ -234,7 +234,6 @@ def run_lab01(df_true, df_meas, config):
     print("\n--- Lab 01: Linear Kalman Filter ---")
     # Настройка и запуск линейного фильтра Калмана
     test_sigmas = [0.01, 1.0, 10.0, 0.69, 0.7, 0.73]
-    # test_sigmas = [0.69]
     
     df_true_renamed = df_true[['t', 'E', 'N', 'U', 'vE', 'vN', 'vU']].rename(
         columns={'E': 'E_true', 'N': 'N_true', 'U': 'U_true',
@@ -350,18 +349,43 @@ def run_lab03(
     gnss_pos_sigma: float | None = None,
     accel_bias_rw_sigma: float = 1e-3,
     gyro_bias_rw_sigma: float = 1e-4,
+    gnss_pos_sigma_grid: list[float] | None = None,
+    accel_bias_rw_sigma_grid: list[float] | None = None,
+    gyro_bias_rw_sigma_grid: list[float] | None = None,
+    tune_filter: bool = True,
     plot_enabled: bool = True,
 ):
-    print("--- Lab 03: Loosely Coupled INS/GNSS ---")
+    print("\n--- Lab 03: Loosely Coupled INS/GNSS ---")
 
     gnss_pos_sigma = config.gnss_pos_sigma if gnss_pos_sigma is None else gnss_pos_sigma
+    gnss_pos_sigma_grid = [gnss_pos_sigma] if gnss_pos_sigma_grid is None else gnss_pos_sigma_grid
+    accel_bias_rw_sigma_grid = [accel_bias_rw_sigma] if accel_bias_rw_sigma_grid is None else accel_bias_rw_sigma_grid
+    gyro_bias_rw_sigma_grid = [gyro_bias_rw_sigma] if gyro_bias_rw_sigma_grid is None else gyro_bias_rw_sigma_grid
 
-    df_ref_nav = df_ref[['t', 'E_imu', 'N_imu', 'U_imu', 'vE', 'vN', 'vU', 'roll', 'pitch', 'yaw', 'q_w', 'q_x', 'q_y', 'q_z', 'E_ant', 'N_ant', 'U_ant']].copy()
+    if tune_filter:
+        if gnss_pos_sigma_grid == [gnss_pos_sigma]:
+            gnss_pos_sigma_grid = [3.0]
+        if accel_bias_rw_sigma_grid == [accel_bias_rw_sigma]:
+            accel_bias_rw_sigma_grid = [1e-1]
+        if gyro_bias_rw_sigma_grid == [gyro_bias_rw_sigma]:
+            gyro_bias_rw_sigma_grid = [1e-2]
+
+    df_ref_nav = df_ref[[
+        't', 'E_imu', 'N_imu', 'U_imu',
+        'vE', 'vN', 'vU',
+        'roll', 'pitch', 'yaw',
+        'q_w', 'q_x', 'q_y', 'q_z',
+        'E_ant', 'N_ant', 'U_ant'
+    ]].copy()
 
     row_gnss0 = df_gnss_meas.iloc[0]
     row_ref0 = df_ref.iloc[0]
     init_pos = row_gnss0[['E', 'N', 'U']].to_numpy(dtype=float)
-    init_vel = row_gnss0[['vE', 'vN', 'vU']].to_numpy(dtype=float) if all(col in df_gnss_meas.columns for col in ['vE', 'vN', 'vU']) else np.zeros(3)
+    init_vel = (
+        row_gnss0[['vE', 'vN', 'vU']].to_numpy(dtype=float)
+        if all(col in df_gnss_meas.columns for col in ['vE', 'vN', 'vU'])
+        else np.zeros(3)
+    )
     init_quat = row_ref0[['q_w', 'q_x', 'q_y', 'q_z']].to_numpy(dtype=float)
 
     print(" -> Автономная ИНС-механизация...")
@@ -374,52 +398,107 @@ def run_lab03(
     )
 
     df_true_rmse = df_ref_nav[['t', 'E_imu', 'N_imu', 'U_imu', 'vE', 'vN', 'vU']].rename(columns={
-        'E_imu': 'E_true', 'N_imu': 'N_true', 'U_imu': 'U_true',
-        'vE': 'vE_true', 'vN': 'vN_true', 'vU': 'vU_true'
+        'E_imu': 'E_true',
+        'N_imu': 'N_true',
+        'U_imu': 'U_true',
+        'vE': 'vE_true',
+        'vN': 'vN_true',
+        'vU': 'vU_true',
     })
 
     df_ins_rmse = df_ins[['t', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est']].copy()
     metrics_ins = calculate_rmse(df_true_rmse, df_ins_rmse)
-    print(f"Автономная ИНС: RMSE позиции = {metrics_ins['pos_rmse_3d']:.3f} м, RMSE скорости = {metrics_ins['vel_rmse_3d']:.3f} м/с")
-
-    if plot_enabled:
-        plot_nav_solution_comparison(df_ref_nav, df_ins, df_gnss=df_gnss_meas, title_suffix='(автономная ИНС)')
-
-    print(" -> ESKF без учета lever arm...")
-    df_eskf_noarm = run_loosely_coupled_ins_gnss(
-        df_imu=df_imu_noisy,
-        df_gnss=df_gnss_meas,
-        df_ref=df_ref,
-        cfg=config,
-        use_lever_arm=False,
-        gnss_pos_sigma=gnss_pos_sigma,
-        accel_bias_rw_sigma=accel_bias_rw_sigma,
-        gyro_bias_rw_sigma=gyro_bias_rw_sigma,
+    print(
+        f"Автономная ИНС: RMSE позиции = {metrics_ins['pos_rmse_3d']:.3f} м, "
+        f"RMSE скорости = {metrics_ins['vel_rmse_3d']:.3f} м/с"
     )
-    df_eskf_noarm_rmse = df_eskf_noarm[['t', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est']].copy()
-    metrics_eskf_noarm = calculate_rmse(df_true_rmse, df_eskf_noarm_rmse)
-    print(f"ESKF без lever arm: RMSE позиции = {metrics_eskf_noarm['pos_rmse_3d']:.3f} м, RMSE скорости = {metrics_eskf_noarm['vel_rmse_3d']:.3f} м/с")
 
     if plot_enabled:
-        plot_nav_solution_comparison(df_ref_nav, df_eskf_noarm, df_gnss=df_gnss_meas, title_suffix='(ESKF без lever arm)')
+        plot_nav_solution_comparison(
+            df_ref_nav, df_ins, df_gnss=df_gnss_meas,
+            title_suffix='(автономная ИНС)'
+        )
 
-    print(" -> ESKF с учетом lever arm...")
-    df_eskf_arm = run_loosely_coupled_ins_gnss(
-        df_imu=df_imu_noisy,
-        df_gnss=df_gnss_meas,
-        df_ref=df_ref,
-        cfg=config,
-        use_lever_arm=True,
-        gnss_pos_sigma=gnss_pos_sigma,
-        accel_bias_rw_sigma=accel_bias_rw_sigma,
-        gyro_bias_rw_sigma=gyro_bias_rw_sigma,
+    def run_single_filter(use_lever_arm: bool, pos_sigma: float, accel_rw: float, gyro_rw: float):
+        return run_loosely_coupled_ins_gnss(
+            df_imu=df_imu_noisy,
+            df_gnss=df_gnss_meas,
+            df_ref=df_ref,
+            cfg=config,
+            use_lever_arm=use_lever_arm,
+            gnss_pos_sigma=pos_sigma,
+            accel_bias_rw_sigma=accel_rw,
+            gyro_bias_rw_sigma=gyro_rw,
+        )
+
+    def select_best_result(use_lever_arm: bool, label: str):
+        best_df = None
+        best_metrics = None
+        best_params = None
+        best_rmse = np.inf
+
+        print(f" -> Подбор параметров для {label}...")
+        for pos_sigma in gnss_pos_sigma_grid:
+            for accel_rw in accel_bias_rw_sigma_grid:
+                for gyro_rw in gyro_bias_rw_sigma_grid:
+                    df_candidate = run_single_filter(use_lever_arm, pos_sigma, accel_rw, gyro_rw)
+                    df_candidate_rmse = df_candidate[[
+                        't', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est'
+                    ]].copy()
+                    metrics_candidate = calculate_rmse(df_true_rmse, df_candidate_rmse)
+
+                    print(
+                        f"   {label}: R={pos_sigma:.3f}, "
+                        f"q_ba={accel_rw:.1e}, q_bg={gyro_rw:.1e} -> "
+                        f"RMSE pos={metrics_candidate['pos_rmse_3d']:.3f} м, "
+                        f"vel={metrics_candidate['vel_rmse_3d']:.3f} м/с"
+                    )
+
+                    if metrics_candidate['pos_rmse_3d'] < best_rmse:
+                        best_rmse = metrics_candidate['pos_rmse_3d']
+                        best_df = df_candidate
+                        best_metrics = metrics_candidate
+                        best_params = {
+                            'gnss_pos_sigma': pos_sigma,
+                            'accel_bias_rw_sigma': accel_rw,
+                            'gyro_bias_rw_sigma': gyro_rw,
+                        }
+
+        return best_df, best_metrics, best_params
+
+    df_eskf_noarm, metrics_eskf_noarm, best_params_noarm = select_best_result(
+        False, 'ESKF без lever arm'
     )
-    df_eskf_arm_rmse = df_eskf_arm[['t', 'E_est', 'N_est', 'U_est', 'vE_est', 'vN_est', 'vU_est']].copy()
-    metrics_eskf_arm = calculate_rmse(df_true_rmse, df_eskf_arm_rmse)
-    print(f"ESKF с lever arm: RMSE позиции = {metrics_eskf_arm['pos_rmse_3d']:.3f} м, RMSE скорости = {metrics_eskf_arm['vel_rmse_3d']:.3f} м/с")
-
+    print(
+        f"Лучший ESKF без lever arm: "
+        f"R={best_params_noarm['gnss_pos_sigma']:.3f}, "
+        f"q_ba={best_params_noarm['accel_bias_rw_sigma']:.1e}, "
+        f"q_bg={best_params_noarm['gyro_bias_rw_sigma']:.1e}, "
+        f"RMSE позиции = {metrics_eskf_noarm['pos_rmse_3d']:.3f} м, "
+        f"RMSE скорости = {metrics_eskf_noarm['vel_rmse_3d']:.3f} м/с"
+    )
     if plot_enabled:
-        plot_nav_solution_comparison(df_ref_nav, df_eskf_arm, df_gnss=df_gnss_meas, title_suffix='(ESKF с lever arm)')
+        plot_nav_solution_comparison(
+            df_ref_nav, df_eskf_noarm, df_gnss=df_gnss_meas,
+            title_suffix='(лучший ESKF без lever arm)'
+        )
+
+    df_eskf_arm, metrics_eskf_arm, best_params_arm = select_best_result(
+        True, 'ESKF с lever arm'
+    )
+    print(
+        f"Лучший ESKF с lever arm: "
+        f"R={best_params_arm['gnss_pos_sigma']:.3f}, "
+        f"q_ba={best_params_arm['accel_bias_rw_sigma']:.1e}, "
+        f"q_bg={best_params_arm['gyro_bias_rw_sigma']:.1e}, "
+        f"RMSE позиции = {metrics_eskf_arm['pos_rmse_3d']:.3f} м, "
+        f"RMSE скорости = {metrics_eskf_arm['vel_rmse_3d']:.3f} м/с"
+    )
+    if plot_enabled:
+        plot_nav_solution_comparison(
+            df_ref_nav, df_eskf_arm, df_gnss=df_gnss_meas,
+            title_suffix='(лучший ESKF с lever arm)'
+        )
 
     return {
         'df_ins': df_ins,
@@ -428,6 +507,8 @@ def run_lab03(
         'metrics_ins': metrics_ins,
         'metrics_eskf_noarm': metrics_eskf_noarm,
         'metrics_eskf_arm': metrics_eskf_arm,
+        'best_params_noarm': best_params_noarm,
+        'best_params_arm': best_params_arm,
     }
 
 # ==========================================
@@ -441,9 +522,12 @@ def run_lab04():
 
 if __name__ == "__main__":
     config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
-    
+    df_true = df_imu_clean.rename(
+        columns={'E_imu': 'E', 'N_imu': 'N', 'U_imu': 'U',
+                 'vE_imu': 'vE', 'vN_imu': 'vN', 'vU_imu': 'vU'}
+    )
     #plot_results(df_imu_clean, df_gnss_noisy)
-    #run_lab01(df_gnss_clean, df_gnss_noisy, config)
-    #run_lab02(df_gnss_raw, df_gnss_clean, config)
+    run_lab01(df_true, df_gnss_noisy, config)
+    run_lab02(df_gnss_raw, df_true, config)
     run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
     # run_lab04()
