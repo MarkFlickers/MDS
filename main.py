@@ -364,11 +364,11 @@ def run_lab03(
 
     if tune_filter:
         if gnss_pos_sigma_grid == [gnss_pos_sigma]:
-            gnss_pos_sigma_grid = [3.0]
+            gnss_pos_sigma_grid = [4.0, 5.0, 7.0, 8.0]
         if accel_bias_rw_sigma_grid == [accel_bias_rw_sigma]:
-            accel_bias_rw_sigma_grid = [1e-1]
+            accel_bias_rw_sigma_grid = [1e-6, 1e-5, 1e-4]
         if gyro_bias_rw_sigma_grid == [gyro_bias_rw_sigma]:
-            gyro_bias_rw_sigma_grid = [1e-2]
+            gyro_bias_rw_sigma_grid = [1e-6, 1e-5, 1e-4]
 
     df_ref_nav = df_ref[[
         't', 'E_imu', 'N_imu', 'U_imu',
@@ -527,7 +527,8 @@ if __name__ == "__main__":
                  'vE_imu': 'vE', 'vN_imu': 'vN', 'vU_imu': 'vU'}
     )
     #plot_results(df_imu_clean, df_gnss_noisy)
-    run_lab01(df_true, df_gnss_noisy, config)
-    run_lab02(df_gnss_raw, df_true, config)
-    run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
+    #run_lab01(df_true, df_gnss_noisy, config)
+    #run_lab02(df_gnss_raw, df_true, config)
+    run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
+    # run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
     # run_lab04()
