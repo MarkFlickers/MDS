@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from configuration import TrajectoryConfig, stages_scenario, stages_scenario_hard
+from configuration import TrajectoryConfig, stages_scenario, stages_scenario_hard, stages_scenario_extreme, stages_scenario_city
 from trajectory import generate_trajectory, simulate_imu_errors
 from gnss import process_gnss, simulate_gnss_raw
 from graph import plot_results, plot_kf_comparison, plot_wls_results, plot_nav_solution_comparison
@@ -219,7 +219,7 @@ def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: Tra
 # ==========================================
 def generate_all_data():
     config = TrajectoryConfig()
-    df_imu_clean = generate_trajectory(config, stages_scenario_hard)
+    df_imu_clean = generate_trajectory(config, stages_scenario_city)
     df_imu_noisy = simulate_imu_errors(df_imu_clean, config)
     df_gnss_clean, df_gnss_noisy = process_gnss(df_imu_clean, config)
     df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
@@ -526,9 +526,9 @@ if __name__ == "__main__":
         columns={'E_imu': 'E', 'N_imu': 'N', 'U_imu': 'U',
                  'vE_imu': 'vE', 'vN_imu': 'vN', 'vU_imu': 'vU'}
     )
-    #plot_results(df_imu_clean, df_gnss_noisy)
-    #run_lab01(df_true, df_gnss_noisy, config)
-    #run_lab02(df_gnss_raw, df_true, config)
+    plot_results(df_imu_clean, df_gnss_noisy)
+    run_lab01(df_true, df_gnss_noisy, config)
+    run_lab02(df_gnss_raw, df_true, config)
     run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
     # run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
     # run_lab04()
