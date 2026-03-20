@@ -10,7 +10,32 @@ from quaternion import quat_from_rotvec, quat_mul, quat_to_dcm, quat_to_euler, e
 
 def _normalize_quat(q: np.ndarray) -> np.ndarray:
     q = np.asarray(q, dtype=float)
-    return q / np.linalg.norm(q)
+    n = np.linalg.norm(q)
+    if n == 0.0:
+        raise ValueError('Zero-norm quaternion')
+    return q / n
+
+
+def _mechanization_step(
+    r_n: np.ndarray,
+    v_n: np.ndarray,
+    q_nb: np.ndarray,
+    f_b_meas: np.ndarray,
+    w_b_meas: np.ndarray,
+    accel_bias: np.ndarray,
+    gyro_bias: np.ndarray,
+    g_n: np.ndarray,
+    dt: float,
+):
+    w_b_corr = np.asarray(w_b_meas, dtype=float) - np.asarray(gyro_bias, dtype=float)
+    q_nb = _normalize_quat(quat_mul(q_nb, quat_from_rotvec(w_b_corr * dt)))
+    C_nb = quat_to_dcm(q_nb)
+
+    f_b_corr = np.asarray(f_b_meas, dtype=float) - np.asarray(accel_bias, dtype=float)
+    a_n = C_nb @ f_b_corr + g_n
+    v_n = np.asarray(v_n, dtype=float) + a_n * dt
+    r_n = np.asarray(r_n, dtype=float) + v_n * dt
+    return r_n, v_n, q_nb, C_nb, f_b_corr, w_b_corr, a_n
 
 
 def mechanize_ins(
@@ -22,17 +47,15 @@ def mechanize_ins(
     accel_bias: np.ndarray | None = None,
     gyro_bias: np.ndarray | None = None,
 ) -> pd.DataFrame:
-    """Автономная ИНС-механизация в локальной системе ENU."""
+    """Автономная strapdown ИНС-механизация в ENU."""
     accel_bias = np.zeros(3) if accel_bias is None else np.asarray(accel_bias, dtype=float).copy()
     gyro_bias = np.zeros(3) if gyro_bias is None else np.asarray(gyro_bias, dtype=float).copy()
 
     t = df_imu['t'].to_numpy(dtype=float)
     n = len(df_imu)
-
     r_n = np.asarray(init_pos, dtype=float).copy()
     v_n = np.asarray(init_vel, dtype=float).copy()
     q_nb = _normalize_quat(np.asarray(init_quat, dtype=float).copy())
-
     g_n = np.array([0.0, 0.0, -cfg.g], dtype=float)
 
     hist = {
@@ -42,12 +65,14 @@ def mechanize_ins(
         'q_w': np.zeros(n), 'q_x': np.zeros(n), 'q_y': np.zeros(n), 'q_z': np.zeros(n),
         'roll_est': np.zeros(n), 'pitch_est': np.zeros(n), 'yaw_est': np.zeros(n),
         'E_ant_est': np.zeros(n), 'N_ant_est': np.zeros(n), 'U_ant_est': np.zeros(n),
+        'aE_est': np.zeros(n), 'aN_est': np.zeros(n), 'aU_est': np.zeros(n),
     }
 
-    def save_state(k: int):
+    def save_state(k: int, a_n: np.ndarray | None = None):
         C_nb = quat_to_dcm(q_nb)
         r_ant = r_n + C_nb @ cfg.lever_arm
         roll, pitch, yaw = quat_to_euler(q_nb)
+        a_nav = np.zeros(3, dtype=float) if a_n is None else np.asarray(a_n, dtype=float)
 
         hist['t'][k] = t[k]
         hist['E_est'][k], hist['N_est'][k], hist['U_est'][k] = r_n
@@ -55,25 +80,18 @@ def mechanize_ins(
         hist['q_w'][k], hist['q_x'][k], hist['q_y'][k], hist['q_z'][k] = q_nb
         hist['roll_est'][k], hist['pitch_est'][k], hist['yaw_est'][k] = roll, pitch, yaw
         hist['E_ant_est'][k], hist['N_ant_est'][k], hist['U_ant_est'][k] = r_ant
+        hist['aE_est'][k], hist['aN_est'][k], hist['aU_est'][k] = a_nav
 
-    save_state(0)
+    save_state(0, np.zeros(3))
 
     for k in range(1, n):
         dt = float(t[k] - t[k - 1])
         f_b_meas = df_imu.loc[k, ['f_x', 'f_y', 'f_z']].to_numpy(dtype=float)
         w_b_meas = df_imu.loc[k, ['w_x', 'w_y', 'w_z']].to_numpy(dtype=float)
-
-        w_b_corr = w_b_meas - gyro_bias
-        dq = quat_from_rotvec(w_b_corr * dt)
-        q_nb = _normalize_quat(quat_mul(q_nb, dq))
-
-        C_nb = quat_to_dcm(q_nb)
-        f_b_corr = f_b_meas - accel_bias
-        a_n = C_nb @ f_b_corr + g_n
-
-        v_n = v_n + a_n * dt
-        r_n = r_n + v_n * dt
-        save_state(k)
+        r_n, v_n, q_nb, _, _, _, a_n = _mechanization_step(
+            r_n, v_n, q_nb, f_b_meas, w_b_meas, accel_bias, gyro_bias, g_n, dt
+        )
+        save_state(k, a_n)
 
     return pd.DataFrame(hist)
 
@@ -98,7 +116,6 @@ def run_loosely_coupled_ins_gnss(
 
     t = df_imu['t'].to_numpy(dtype=float)
     n = len(df_imu)
-
     gnss_row0 = df_gnss.iloc[0]
     ref_row0 = df_ref.iloc[0]
 
@@ -138,7 +155,6 @@ def run_loosely_coupled_ins_gnss(
     b_g = np.zeros(3, dtype=float)
     g_n = np.array([0.0, 0.0, -cfg.g], dtype=float)
     R = np.eye(3, dtype=float) * (gnss_pos_sigma ** 2)
-
     gnss_lookup = {round(float(row.t), 9): row for row in df_gnss.itertuples(index=False)}
 
     hist = {
@@ -157,7 +173,6 @@ def run_loosely_coupled_ins_gnss(
         C_nb = quat_to_dcm(q_nb)
         r_ant = r_n + C_nb @ cfg.lever_arm
         roll, pitch, yaw = quat_to_euler(q_nb)
-
         hist['t'][k] = t[k]
         hist['E_est'][k], hist['N_est'][k], hist['U_est'][k] = r_n
         hist['vE_est'][k], hist['vN_est'][k], hist['vU_est'][k] = v_n
@@ -175,17 +190,9 @@ def run_loosely_coupled_ins_gnss(
         f_b_meas = df_imu.loc[k, ['f_x', 'f_y', 'f_z']].to_numpy(dtype=float)
         w_b_meas = df_imu.loc[k, ['w_x', 'w_y', 'w_z']].to_numpy(dtype=float)
 
-        w_b_corr = w_b_meas - b_g
-        dq = quat_from_rotvec(w_b_corr * dt)
-        q_nb = _normalize_quat(quat_mul(q_nb, dq))
-
-        C_nb = quat_to_dcm(q_nb)
-        f_b_corr = f_b_meas - b_a
-        a_n = C_nb @ f_b_corr + g_n
-
-        v_n = v_n + a_n * dt
-        r_n = r_n + v_n * dt
-
+        r_n, v_n, q_nb, C_nb, f_b_corr, w_b_corr, _ = _mechanization_step(
+            r_n, v_n, q_nb, f_b_meas, w_b_meas, b_a, b_g, g_n, dt
+        )
         kf.predict_ins(C_nb=C_nb, f_b_corr=f_b_corr, w_b_corr=w_b_corr, dt=dt)
 
         gnss_update = False
