@@ -40,7 +40,7 @@ def plot_results(df_imu: pd.DataFrame, df_gnss_noisy: pd.DataFrame):
     # Выравнивание осей для корректного восприятия масштаба
     # (Matplotlib 3D по умолчанию искажает масштаб)
     try:
-        ax.set_box_aspect([np.ptp(df_imu['E_ant']), np.ptp(df_imu['N_ant']), np.ptp(df_imu['U_ant'])])
+        ax.set_box_aspect([np.ptp(df_gnss_noisy['E']), np.ptp(df_gnss_noisy['N']), np.max([np.ptp(df_gnss_noisy['U']), 50])])
     except:
         pass # Если старая версия matplotlib
 
