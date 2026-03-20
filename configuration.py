@@ -15,7 +15,7 @@ class Stage:
 class TrajectoryConfig:
     # Временная сетка
     dt_imu: float = 1/100    # Шаг ИМУ (100 Гц)
-    dt_gnss: float = 2    # Шаг ГНСС (0.5 Гц)
+    dt_gnss: float = 1    # Шаг ГНСС (1 Гц)
     
     # Генераторы случайных чисел (для воспроизводимости)
     seed_gnss: int = 42
