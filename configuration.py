@@ -22,14 +22,14 @@ class TrajectoryConfig:
     seed_imu: int = 42
     
     # Опорная точка (нейтральная, экватор/нулевой меридиан для простоты)
-    ref_lat: float = 0.0    # [рад]
-    ref_lon: float = 0.0    # [рад]
-    ref_alt: float = 0.0    # [м]
+    ref_lat: float = np.deg2rad(20)    # [рад]
+    ref_lon: float = np.deg2rad(20)    # [рад]
+    ref_alt: float = 100.0    # [м]
     
     # Физика и геометрия
     g: float = 9.81                 # Ускорение свободного падения [м/с^2]
     gnss_pos_sigma: float = 3.0     # СКО шума ГНСС [м]
-    lever_arm: np.ndarray = field(default_factory=lambda: np.array([1.8, 0.2, 1.0]))    # Вынос ИМУ -> Антенна ГНСС в ССК [м]
+    lever_arm: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))    # Вынос ИМУ -> Антенна ГНСС в ССК [м]
 
     # Начальные условия
     init_pos_enu: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0]))     # [E, N, U]
@@ -136,8 +136,8 @@ stages_scenario_extreme = [
 stages_scenario_city = [
     Stage(6.0,  np.array([ 1.5,  0.0,  0.0]), ZERO_A, "Старт со светофора"),
     Stage(10.0, ZERO_A, ZERO_A, "Ровное движение по прямой"),
-    Stage(2.0,  np.array([-4.5,  0.0,  0.0]), ZERO_A, "Резкое торможение"),
-    Stage(4.0,  ZERO_A, ZERO_A, "Короткая остановка"),
+    Stage(2.0,  np.array([-4.4,  0.0,  0.0]), ZERO_A, "Резкое торможение"),
+    Stage(2.0,  ZERO_A, ZERO_A, "Короткая остановка"),
 
     Stage(5.0,  np.array([ 1.6,  0.0,  0.0]), ZERO_A, "Повторный разгон"),
     Stage(1.0,  ZERO_A, np.array([0.0, 0.0,  1.57]), "Резкий вход в правый поворот"),
@@ -159,8 +159,8 @@ stages_scenario_city = [
     # Stage(3.0,  np.array([-1.0,  0.0,  0.0]), ZERO_A, "Сброс скорости после обгона"),
 
     Stage(6.0,  ZERO_A, ZERO_A, "Длинный прямой участок"),
-    Stage(4.0,  np.array([-2.0,  0.0,  0.0]), ZERO_A, "Подъезд к перекрёстку"),
-    Stage(5.0,  ZERO_A, ZERO_A, "Остановка на перекрёстке"),
+    Stage(4.0,  np.array([-1.95,  0.0,  0.0]), ZERO_A, "Подъезд к перекрёстку"),
+    Stage(2.0,  ZERO_A, ZERO_A, "Остановка на перекрёстке"),
 
     Stage(4.0,  np.array([ 1.0,  0.0,  0.0]), ZERO_A, "Начало разворота"),
     Stage(1.2,  ZERO_A, np.array([0.0, 0.0,  2.2]), "Раскрутка влево"),
@@ -180,6 +180,6 @@ stages_scenario_city = [
     Stage(1.5,  np.array([ 0.5, -5.0,  0.0]), ZERO_A, "Возврат в траекторию"),
     Stage(8.0,  ZERO_A, ZERO_A, "Стабильное движение"),
 
-    Stage(3.0,  np.array([-1.83,  0.0,  0.0]), ZERO_A, "Финальное торможение"),
+    Stage(3.0,  np.array([-1.82,  0.0,  0.0]), ZERO_A, "Финальное торможение"),
     Stage(6.0,  ZERO_A, ZERO_A, "Финишная остановка"),
 ]
