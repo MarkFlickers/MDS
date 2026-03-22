@@ -459,7 +459,7 @@ def plot_nav_solution_comparison(
         ax_3d.set_box_aspect([
             np.ptp(df_ref[ref['E']]),
             np.ptp(df_ref[ref['N']]),
-            max(np.ptp(df_ref[ref['U']]), 1e-6),
+            max(np.ptp(df_ref[ref['U']]), 50),
         ])
     except Exception:
         pass
