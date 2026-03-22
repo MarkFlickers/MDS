@@ -1,0 +1,79 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CSV to SignalSim",
+            "group": "build",
+            "type": "shell",
+            "dependsOrder": "sequence",
+            "command": "python",
+            "args": [
+                "csv_2_SignalSim/csv_to_signalsim_traj.py",
+                "output/CSV_to_SignalSim_track.csv",
+                "output/SignalSimInput.json",
+                "--template", "CSV_to_SignalSim_template.json",
+                "--init-course-unit", "rad",
+                "--turn-angle-unit", "degree",
+                "--angleunit-field", "degree"
+            ],
+            "options": {
+                "statusbar": {
+                    "color": "#34f104",
+                    "icon": {
+                        "id": "bracket"
+                    }
+                }
+            }
+        },
+        {
+            "label": "Make SignalSim",
+            "group": "build",
+            "type": "shell",
+            "dependsOrder": "sequence",
+            "command": "make",
+            "args": [
+                "-j24"
+            ],
+            "problemMatcher": {
+                "owner": "c17",
+                "fileLocation": ["relative", "${workspaceFolder}/SignalSim/"],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            },
+            "options": {
+                "statusbar": {
+                    "color": "#960eeb",
+                    "icon": {
+                        "id": "check"
+                    }
+                },
+                "cwd": "./SignalSim/"
+            }
+        },
+        {
+            "label": "Clean SignalSim",
+            "group": "build",
+            "type": "shell",
+            "dependsOrder": "sequence",
+            "command": "make",
+            "args": [
+                "clean"
+            ],
+            "options": {
+                "statusbar": {
+                    "color": "#a2063a",
+                    "icon": {
+                        "id": "trashcan"
+                    }
+                },
+                "cwd": "./SignalSim/"
+            }
+        }
+    ]
+}
