@@ -1,0 +1,18 @@
+{
+    "makefile.configurations": [
+        {
+            "name": "SignalSim",
+            "makeArgs": [
+                "-j24"
+            ],
+            "makefile.makeDirectory": "SignalSim/",
+            "makefile.makefilePath": "SignalSim/makefile",
+            "problemMatchers": [
+                "$gcc",
+                "$msvc"
+            ]
+        }
+    ],
+    "makefile.makeDirectory": "SignalSim/",
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools"
+}
