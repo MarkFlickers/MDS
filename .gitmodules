@@ -3,4 +3,4 @@
 	url = https://github.com/MarkFlickers/csv_2_SignalSim.git
 [submodule "SignalSim"]
 	path = SignalSim
-	url = https://github.com/Daody/SignalSim.git
+	url = https://github.com/MarkFlickers/SignalSim.git
