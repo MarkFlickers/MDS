@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict
 from math import degrees
 from csv_2_SignalSim.csv_to_signalsim_traj import main as csv_2_SignalSim
+from pathlib import Path
+import subprocess
 
 def save_trajectories(df_imu_clean: pd.DataFrame, df_imu_noisy: pd.DataFrame, df_gnss_clean: pd.DataFrame, df_gnss_noisy: pd.DataFrame, df_gnss_raw: pd.DataFrame):
     df_imu_clean.to_csv("output/trajectory_imu_ideal.csv", index=False)    # Cохраняем идеал для отладки
@@ -23,6 +25,15 @@ def save_trajectories(df_imu_clean: pd.DataFrame, df_imu_noisy: pd.DataFrame, df
                 "--init-course-unit", "rad",
                 "--turn-angle-unit", "degree",
                 "--angleunit-field", "degree"])
+    
+    exe_path = Path("SignalSim/bin/JsonObsGen.exe").resolve()
+    json_path = Path("output/SignalSimInput.json").resolve()
+
+    subprocess.run(
+        [str(exe_path), str(json_path)],
+        cwd=str(Path("SignalSim").resolve()),
+        check=True
+    )
 
 def save_metadata(config, filename="output/trajectory_metadata.json"):
     meta = asdict(config)
