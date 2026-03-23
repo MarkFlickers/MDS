@@ -6,8 +6,11 @@ from math import degrees
 from csv_2_SignalSim.csv_to_signalsim_traj import main as csv_2_SignalSim
 from pathlib import Path
 import subprocess
+from pathlib import Path
+
 
 def save_trajectories(df_imu_clean: pd.DataFrame, df_imu_noisy: pd.DataFrame, df_gnss_clean: pd.DataFrame, df_gnss_noisy: pd.DataFrame, df_gnss_raw: pd.DataFrame):
+    Path("output").mkdir(parents=True, exist_ok=True)
     df_imu_clean.to_csv("output/trajectory_imu_ideal.csv", index=False)    # Cохраняем идеал для отладки
     df_imu_noisy.to_csv("output/trajectory_imu_noisy.csv", index=False)          # Тут реалистичные измерения с шумом
     df_gnss_clean.to_csv("output/trajectory_gnss_true.csv", index=False)   
