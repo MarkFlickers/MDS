@@ -140,7 +140,7 @@
   "output": {
     "type": "observation",
     "format": "RINEX",
-    "name": "SignalSimTrajectory.obs",
+    "name": "..\/output\/SignalSimTrajectory.obs",
     "interval": 1,
     "config": {
       "elevationMask": 3,
