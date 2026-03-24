@@ -25,7 +25,7 @@ def save_trajectories(df_imu_clean: pd.DataFrame, df_imu_noisy: pd.DataFrame, df
                 ["output/CSV_to_SignalSim_track.csv",
                 "output/SignalSimInput.json",
                 "--template", "CSV_to_SignalSim_template.json",
-                "--init-course-unit", "rad",
+                "--init-course-unit", "degree",
                 "--turn-angle-unit", "degree",
                 "--angleunit-field", "degree"])
     
