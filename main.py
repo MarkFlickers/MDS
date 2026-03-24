@@ -530,6 +530,9 @@ if __name__ == "__main__":
         columns={'E_imu': 'E', 'N_imu': 'N', 'U_imu': 'U',
                  'vE_imu': 'vE', 'vN_imu': 'vN', 'vU_imu': 'vU'}
     )
+    df_true = pd.concat([df_true, df_gnss_clean[['X_ecef', 'Y_ecef', 'Z_ecef']]], axis=1)
+    df_gnss_raw = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0)
+    
     plot_results(df_imu_clean, df_gnss_noisy)
     run_lab01(df_true, df_gnss_noisy, config)
     run_lab02(df_gnss_raw, df_true, config)
