@@ -22,9 +22,9 @@ class TrajectoryConfig:
     seed_imu: int = 42
     
     # Опорная точка (нейтральная, экватор/нулевой меридиан для простоты)
-    ref_lat: float = np.deg2rad(20)    # [рад]
-    ref_lon: float = np.deg2rad(20)    # [рад]
-    ref_alt: float = 100.0    # [м]
+    ref_lat: float = np.deg2rad(0)    # [рад]
+    ref_lon: float = np.deg2rad(0)    # [рад]
+    ref_alt: float = 0    # [м]
     
     # Физика и геометрия
     g: float = 9.81                 # Ускорение свободного падения [м/с^2]
