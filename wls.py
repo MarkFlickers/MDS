@@ -9,6 +9,21 @@ class WlsConfig:
     tol: float = 1e-3       # Критерий остановки (м)
     sigma_pr: float = 3.0   # СКО псевдодальности в зените (м)
     
+# def gps_clock_correction(df_epoch):
+#     double TimeDiff = TransmitTime - Eph->toc;
+# 	double ClockAdj;
+
+# 	// protection for time ring back at week end
+# 	if (TimeDiff > 302400.0)
+# 		TimeDiff -= 604800;
+# 	if (TimeDiff < -302400.0)
+# 		TimeDiff += 604800;
+
+# 	ClockAdj = Eph->af0 + (Eph->af1 + Eph->af2 * TimeDiff) * TimeDiff;
+# 	ClockAdj *= (1 - Eph->af1);	// adjustment to time
+
+# 	return ClockAdj;
+
 def wls_epoch(df_epoch, x_prev, config: WlsConfig):
     """
     Решает навигационную задачу для одной эпохи методом Взвешенного МНК (WLS).
@@ -22,6 +37,12 @@ def wls_epoch(df_epoch, x_prev, config: WlsConfig):
     # Измеренные псевдодальности
     pr = df_epoch['pseudorange'].values
     
+    # Параметры эфемерида
+    # if 'af1' in df_epoch:
+    #     clock_correction = gps_clock_correction(df_epoch)
+    # else:
+    #     clock_correction = 0
+    
     for _ in range(config.max_iter):
         rx = x[0:3] # Текущая оценка координат приемника
         cb = x[3]   # Текущая оценка смещения часов
@@ -30,7 +51,7 @@ def wls_epoch(df_epoch, x_prev, config: WlsConfig):
         dr = sat_pos - rx
         rho = np.linalg.norm(dr, axis=1) # Геометрическая дальность
         
-        z_pred = rho + cb                # Предсказанное измерение
+        z_pred = rho + cb #- clock_correction                # Предсказанное измерение
         dz = pr - z_pred                 # Вектор невязок (Innovation)
         
         # 2. Матрица производных H (Design Matrix)
