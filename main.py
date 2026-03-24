@@ -10,6 +10,7 @@ from ins import mechanize_ins, run_loosely_coupled_ins_gnss
 from coord_conversion import ecef_to_enu, enu_to_ecef
 from wls import WlsConfig, wls_epoch
 from data_io import save_trajectories, save_metadata
+from graph import plot_earth_and_satellites
 
 def show_satellite_positions(df_true: pd.DataFrame, config: TrajectoryConfig):
     """
@@ -113,7 +114,7 @@ def run_wls_solver(df_raw: pd.DataFrame, config: TrajectoryConfig) -> pd.DataFra
 
     for t, g in df_raw.groupby('t'):
         g = g.reset_index(drop=True)
-        x_hat, P_hat, dops = wls_epoch(g, x_prev, wls_cfg)  # Забираем DOP
+        x_hat, P_hat, dops = wls_epoch(g, x_prev, wls_cfg, config)  # Забираем DOP
 
         wls_rows.append({
             't': float(t),
@@ -294,7 +295,10 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
         'vE': 'vE_true', 'vN': 'vN_true', 'vU': 'vU_true'
     })
     
-    show_satellite_positions(df_true, config)
+    #show_satellite_positions(df_true, config)
+    sat_positions = df_raw[['sat_X', 'sat_Y', 'sat_Z']][df_raw['t'] == 0.0].values
+    rec_position = df_true[['X_ecef', 'Y_ecef', 'Z_ecef']].values[0]
+    plot_earth_and_satellites(sat_positions, rec_position)
     
     # --- Шаг 1: МНК ---
     df_wls = run_wls_solver(df_raw, config)
