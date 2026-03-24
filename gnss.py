@@ -39,7 +39,7 @@ def _compute_satellite_state(t: float, svid: int, total_sats: int, radius: float
     w_orb = v_mag / radius
     
     # 2. Формируем "Walker Constellation"
-    num_planes = 6  # 6 орбитальных плоскостей (как у GPS)
+    num_planes = 6  # 6 орбитальных плоскостей
     plane_idx = svid % num_planes
     sat_idx = svid // num_planes
     sats_per_plane = max(1, total_sats // num_planes)
@@ -135,10 +135,7 @@ def simulate_gnss_raw(df_gnss_clean: pd.DataFrame, cfg: TrajectoryConfig) -> pd.
     clk_bias_arr, clk_drift_arr = _simulate_clock_errors(n_epochs, cfg.dt_gnss, cfg)
     
     raw_obs_list = []
-    
-    # Увеличим число спутников до 24 аппаратно, чтобы после отсечения невидимых
-    # всегда оставалось достаточно спутников (4+) для решения МНК.
-    # Если в конфиге указано больше, используем значение из конфига.
+
     total_sim_satellites = cfg.num_satellites
     
     # 2. Итерация по эпохам (времени)
