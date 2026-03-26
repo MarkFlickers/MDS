@@ -163,9 +163,12 @@ def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: Tra
     sigma_cd = 0.05 
 
     row0 = df_wls.iloc[0]
+    row1 = df_wls.iloc[1]
+    init_coords = row0
+    init_speed = (row1[['X', 'Y', 'Z']] - row0[['X', 'Y', 'Z']]) / (row1['t'] - row0['t'])
     x0 = np.array([
-        row0['X'], row0['Y'], row0['Z'], 
-        0.0, 0.0, 0.0, 
+        init_coords['X'], init_coords['Y'], init_coords['Z'], 
+        init_speed['X'], init_speed['Y'], init_speed['Z'], 
         row0['cb'], 0.0 
     ])
 
@@ -220,7 +223,7 @@ def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: Tra
 # ==========================================
 def generate_all_data():
     config = TrajectoryConfig()
-    df_imu_clean = generate_trajectory(config, stages_scenario_city)
+    df_imu_clean = generate_trajectory(config, stages_scenario_hard)
     df_imu_noisy = simulate_imu_errors(df_imu_clean, config)
     df_gnss_clean, df_gnss_noisy = process_gnss(df_imu_clean, config)
     df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
@@ -310,7 +313,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     
     # --- Шаг 2: Линейный ФК ---
     print("\n [Linear KF] Подбор параметра sigma_a (доверие модели):")
-    test_sigmas = [0.01, 0.1, 0.5, 0.7, 0.8, 0.9, 1.0, 5.0, 10.0]
+    test_sigmas = [0.01, 0.1, 0.5, 0.7, 0.8, 0.9, 1.0, 5.0, 10.0, 100.0]
     best_df_kf_lin = None
     best_rmse = 999999.9
     
@@ -327,7 +330,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     
     # --- Шаг 3: Расширенный ФК с перебором параметров ---
     print("\n [Extended KF] Подбор параметра sigma_a (доверие модели):")
-    test_sigmas = [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.73, 1.0, 5.0, 10.0]
+    test_sigmas = [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.73, 1.0, 5.0, 10.0, 100.0]
     best_df_kf_ext = None
     best_rmse = 999999.9
     
@@ -534,7 +537,7 @@ if __name__ == "__main__":
     df_gnss_raw = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0)
     lam = df_gnss_raw['sv_id'].astype(str).str[0].map(get_wave_length)
     df_gnss_raw['doppler'] = -lam * df_gnss_raw['doppler']
-    
+
     #plot_results(df_imu_clean, df_gnss_noisy)
     #run_lab01(df_true, df_gnss_noisy, config)
     run_lab02(df_gnss_raw, df_true, config)
