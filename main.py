@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from configuration import TrajectoryConfig, stages_scenario, stages_scenario_hard, stages_scenario_extreme, stages_scenario_city
 from trajectory import generate_trajectory, simulate_imu_errors
-from gnss import process_gnss, simulate_gnss_raw
+from gnss import process_gnss, simulate_gnss_raw, get_wave_length
 from graph import plot_results, plot_kf_comparison, plot_wls_results, plot_nav_solution_comparison
 from metrics import calculate_rmse
 from kalman import LinearKalmanFilter, ExtendedKalmanFilter
@@ -532,10 +532,12 @@ if __name__ == "__main__":
     )
     df_true = pd.concat([df_true, df_gnss_clean[['X_ecef', 'Y_ecef', 'Z_ecef']]], axis=1)
     df_gnss_raw = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0)
+    lam = df_gnss_raw['sv_id'].astype(str).str[0].map(get_wave_length)
+    df_gnss_raw['doppler'] = -lam * df_gnss_raw['doppler']
     
-    plot_results(df_imu_clean, df_gnss_noisy)
-    run_lab01(df_true, df_gnss_noisy, config)
+    #plot_results(df_imu_clean, df_gnss_noisy)
+    #run_lab01(df_true, df_gnss_noisy, config)
     run_lab02(df_gnss_raw, df_true, config)
-    run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
+    #run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
     # run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
     # run_lab04()

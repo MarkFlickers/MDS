@@ -257,3 +257,32 @@ def process_gnss(df_imu: pd.DataFrame, cfg: TrajectoryConfig) -> Tuple[pd.DataFr
     df_noisy['lat'], df_noisy['lon'], df_noisy['alt'] = zip(*noisy_llh)
     
     return df_clean, df_noisy
+
+FREQ_GPS_L1   = 1575420000
+FREQ_GPS_L2   = 1227600000
+FREQ_GPS_L5   = 1176450000
+FREQ_BDS_B1C  = 1575420000
+FREQ_BDS_B1I  = 1561098000
+FREQ_BDS_B2I  = 1207140000
+FREQ_BDS_B3I  = 1268520000
+FREQ_BDS_B2A  = 1176450000
+FREQ_BDS_B2B  = 1207140000
+FREQ_BDS_B2AB = 1191795000
+FREQ_GAL_E1   = 1575420000
+FREQ_GAL_E5A  = 1176450000
+FREQ_GAL_E5B  = 1207140000
+FREQ_GAL_E5   = 1191795000
+FREQ_GAL_E6   = 1278750000
+FREQ_GLO_G1   = 1602000000
+FREQ_GLO_G2   = 1246000000
+FREQ_GLO_G3   = 1202025000
+
+def get_wave_length(system):
+    
+    frequencies = { 
+        'G' : FREQ_GPS_L1,
+        'C' : FREQ_BDS_B1C,
+        'E' : FREQ_GAL_E1,
+        'R' : FREQ_GLO_G1
+    }   
+    return c_light / frequencies[system]
