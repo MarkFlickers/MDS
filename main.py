@@ -9,7 +9,7 @@ from kalman import LinearKalmanFilter, ExtendedKalmanFilter
 from ins import mechanize_ins, run_loosely_coupled_ins_gnss
 from coord_conversion import ecef_to_enu, enu_to_ecef
 from wls import WlsConfig, wls_epoch
-from data_io import save_trajectories, save_metadata
+from data_io import save_trajectories, save_metadata, parse_rtklib_pos
 from graph import plot_earth_and_satellites
 
 def show_satellite_positions(df_true: pd.DataFrame, config: TrajectoryConfig):
@@ -302,6 +302,23 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     sat_positions = df_raw[['sat_X', 'sat_Y', 'sat_Z']][df_raw['t'] == 0.0].values
     rec_position = df_true[['X_ecef', 'Y_ecef', 'Z_ecef']].values[0]
     plot_earth_and_satellites(sat_positions, rec_position)
+
+    # --- Шаг 0: RTKLIB ---
+    df_rtklib = None
+    try:
+        df_rtklib = parse_rtklib_pos(
+        "output/SignalSimTrajectory.pos",
+        ref_lat=config.ref_lat,
+        ref_lon=config.ref_lon,
+        ref_alt=config.ref_alt,
+        )
+    except:
+        pass
+    if df_rtklib is not None:
+        metrics_rtklib = calculate_rmse(df_true_renamed, df_rtklib.rename(columns={'E':'E_est', 'N':'N_est', 'U':'U_est'}))
+        print(f" [RTKLIB] RMSE Позиции (3D): {metrics_rtklib['pos_rmse_3d']:.3f} м")
+    
+        plot_wls_results(df_true, df_rtklib)
     
     # --- Шаг 1: МНК ---
     df_wls = run_wls_solver(df_raw, config)
