@@ -6,7 +6,7 @@ from math import degrees
 from csv_2_SignalSim.csv_to_signalsim_traj import main as csv_2_SignalSim
 from pathlib import Path
 import subprocess
-from pathlib import Path
+from coord_conversion import ecef_to_enu
 
 
 def save_trajectories(df_imu_clean: pd.DataFrame, df_imu_noisy: pd.DataFrame, df_gnss_clean: pd.DataFrame, df_gnss_noisy: pd.DataFrame, df_gnss_raw: pd.DataFrame):
@@ -47,3 +47,66 @@ def save_metadata(config, filename="output/trajectory_metadata.json"):
             
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=4, ensure_ascii=False)
+
+def parse_rtklib_pos(filepath: str, ref_lat: float, ref_lon: float, ref_alt: float) -> pd.DataFrame:
+    rows = []
+
+    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('%'):
+                continue
+
+            parts = line.split()
+            if len(parts) < 15:
+                continue
+
+            date_str = parts[0]
+            time_str = parts[1]
+
+            x = float(parts[2])
+            y = float(parts[3])
+            z = float(parts[4])
+            q = int(parts[5])
+            ns = int(parts[6])
+            sdx = float(parts[7])
+            sdy = float(parts[8])
+            sdz = float(parts[9])
+            sdxy = float(parts[10])
+            sdyz = float(parts[11])
+            sdzx = float(parts[12])
+            age = float(parts[13])
+            ratio = float(parts[14])
+
+            ts = pd.to_datetime(f"{date_str} {time_str}", format="%Y/%m/%d %H:%M:%S.%f")
+            rows.append({
+                'datetime': ts,
+                'X': x,
+                'Y': y,
+                'Z': z,
+                'Q': q,
+                'ns': ns,
+                'sdx': sdx,
+                'sdy': sdy,
+                'sdz': sdz,
+                'sdxy': sdxy,
+                'sdyz': sdyz,
+                'sdzx': sdzx,
+                'age': age,
+                'ratio': ratio,
+            })
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+
+    t0 = df['datetime'].iloc[0]
+    df['t'] = (df['datetime'] - t0).dt.total_seconds()
+
+    enu = [
+        ecef_to_enu(x, y, z, ref_lat, ref_lon, ref_alt)
+        for x, y, z in zip(df['X'], df['Y'], df['Z'])
+    ]
+    df['E'], df['N'], df['U'] = zip(*enu)
+
+    return df
