@@ -1,4 +1,5 @@
 import numpy as np
+from gnss import c_light
 
 class BaseKalmanFilter:
     """
@@ -111,9 +112,10 @@ class ExtendedKalmanFilter(BaseKalmanFilter):
         dr = sat_pos - rx
         rho = np.linalg.norm(dr, axis=1)
         los = dr / rho.reshape(-1, 1) # Line of sight векторы
+        rel_vel = sat_vel - v
 
         # Предсказанный доплер: h(x)
-        dop_pred = np.sum(los * (sat_vel - v), axis=1) + cd
+        dop_pred = np.sum(los * rel_vel, axis=1) + cd
         z = doppler
         y = z - dop_pred
 
