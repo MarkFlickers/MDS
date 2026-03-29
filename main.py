@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from configuration import TrajectoryConfig, stages_scenario, stages_scenario_hard, stages_scenario_extreme, stages_scenario_city
 from trajectory import generate_trajectory, simulate_imu_errors
-from gnss import process_gnss, simulate_gnss_raw, get_wave_length
+from gnss import process_gnss, simulate_gnss_raw, get_wave_length, c_light
 from graph import plot_results, plot_kf_comparison, plot_wls_results, plot_nav_solution_comparison
 from metrics import calculate_rmse
 from kalman import LinearKalmanFilter, ExtendedKalmanFilter
@@ -229,7 +229,10 @@ def generate_all_data():
     df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
     save_trajectories(df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw)
     save_metadata(config)
-    return config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw
+    df_gnss_signalsim = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0)
+    lam = df_gnss_signalsim['sv_id'].astype(str).str[0].map(get_wave_length)
+    df_gnss_signalsim['doppler'] = -lam * df_gnss_signalsim['doppler'] + c_light * df_gnss_signalsim['af1']
+    return config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw, df_gnss_signalsim
 
 # ==========================================
 # Лабораторная работа №1: Линейный КФ (ENU)
@@ -545,15 +548,13 @@ def run_lab04():
     print("Структура для ЛР4 готова. Ожидает построения матрицы измерений.")
 
 if __name__ == "__main__":
-    config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw = generate_all_data()
+    config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw, df_gnss_signalsim = generate_all_data()
     df_true = df_imu_clean.rename(
         columns={'E_imu': 'E', 'N_imu': 'N', 'U_imu': 'U',
                  'vE_imu': 'vE', 'vN_imu': 'vN', 'vU_imu': 'vU'}
     )
     df_true = pd.concat([df_true, df_gnss_clean[['X_ecef', 'Y_ecef', 'Z_ecef']]], axis=1)
-    df_gnss_raw = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0)
-    lam = df_gnss_raw['sv_id'].astype(str).str[0].map(get_wave_length)
-    df_gnss_raw['doppler'] = -lam * df_gnss_raw['doppler']
+
 
     #plot_results(df_imu_clean, df_gnss_noisy)
     #run_lab01(df_true, df_gnss_noisy, config)
