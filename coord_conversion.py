@@ -5,7 +5,7 @@ from typing import Tuple
 
 a_wgs84 = 6378137.0
 e2_wgs84 = 0.00669437999014
-c_light = 299792458.0 # Скорость света для ЛР4
+c_light = 299792458.0 # Скорость света
 
 def enu_to_ecef(e: float, n: float, u: float, lat0: float, lon0: float, alt0: float) -> Tuple[float, float, float]:
     """Локальные ENU в ECEF."""
