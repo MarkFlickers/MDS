@@ -72,12 +72,17 @@ def wls_epoch(df_epoch, x_prev, wls_config: WlsConfig, trajectory_config: Trajec
     pr = df_epoch['pseudorange'].values
     
     # Параметры эфемерида
-    df_ehp = df_epoch[['af0', 'af1', 'af2', 'travel_time', 'satellite_time', 'toc', 'ecc', 'sqrtA', 'Ek', 'Ek_dot']]
     if 'af1' in df_epoch:
+        df_ehp = df_epoch[['af0', 'af1', 'af2', 'travel_time', 'satellite_time', 'toc', 'ecc', 'sqrtA', 'Ek', 'Ek_dot']]
         clock_correction = gps_clock_correction(df_ehp)
     else:
+        df_ehp = None
         clock_correction = 0
     
+    iono_delay = df_epoch['iono_delay'].values if 'iono_delay' in df_epoch else np.zeros_like(pr)
+    group_delay = df_epoch['gd'].values * LIGHT_SPEED if 'gd' in df_epoch else np.zeros_like(pr)
+    relativity = relativity_correction(df_ehp) if df_ehp is not None else np.zeros_like(pr)
+
     for _ in range(wls_config.max_iter):
         rx = x[0:3] # Текущая оценка координат приемника
         cb = x[3]   # Текущая оценка смещения часов
@@ -100,10 +105,7 @@ def wls_epoch(df_epoch, x_prev, wls_config: WlsConfig, trajectory_config: Trajec
         dist_hor = np.sqrt(dr_enu[:, 0]**2 + dr_enu[:, 1]**2)
         el = np.arctan2(dr_enu[:, 2], dist_hor)
         
-        tropo_delay = [TropoDelay(lat, alt, e) for e in el]
-        iono_delay = df_epoch['iono_delay'].values
-        group_delay = df_epoch['gd'].values * LIGHT_SPEED
-        relativity = relativity_correction(df_ehp)
+        tropo_delay = [TropoDelay(lat, alt, e) for e in el] if df_ehp is not None else np.zeros_like(el)
 
         # travel_time = (d + dtrop)/c + tgd - dts - trel + diono
         z_pred = rho + cb - clock_correction + tropo_delay + iono_delay + group_delay - relativity                # Предсказанное измерение
