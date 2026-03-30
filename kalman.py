@@ -119,8 +119,10 @@ class ExtendedKalmanFilter(BaseKalmanFilter):
         z = doppler
         y = z - dop_pred
 
+        proj = np.sum(los * rel_vel, axis=1)[:, None]
         # Матрица Якоби H
         H = np.zeros((m, 8), dtype=float)
+        H[:, 0:3] = (proj * los - rel_vel) / rho[:, None]
         H[:, 3:6] = -los
         H[:, 7] = 1.0
         R = np.eye(m, dtype=float) * (self.sigma_doppler ** 2)
