@@ -132,47 +132,52 @@ def run_wls_solver(df_raw: pd.DataFrame, config: TrajectoryConfig) -> pd.DataFra
 
 def run_linear_kf(df_wls: pd.DataFrame, config: TrajectoryConfig, sigma_a: float = 0.73) -> pd.DataFrame:
     """Запускает линейный ФК из ЛР1, используя ENU координаты от МНК в качестве измерений."""
-    
+
     Q = get_Q_continuous_white_noise(config.dt_gnss, sigma_a)
     R = get_R(config.gnss_pos_sigma)
-    
+
     # Инициализация
     z0 = df_wls.iloc[0][['E', 'N', 'U']].values
     x0 = np.array([z0[0], z0[1], z0[2], 0.0, 0.0, 0.0])
     P0 = np.eye(6)
     P0[0:3, 0:3] *= (config.gnss_pos_sigma ** 2)
     P0[3:6, 3:6] *= 100.0
-    
+
     kf = LinearKalmanFilter(dt=config.dt_gnss, Q=Q, R=R, x0=x0, P0=P0)
-    kf_results = []
-    
-    for _, row in df_wls.iterrows():
+
+    kf_results = [{
+        't': df_wls.iloc[0]['t'],
+        'E_est': x0[0], 'N_est': x0[1], 'U_est': x0[2],
+        'vE_est': x0[3], 'vN_est': x0[4], 'vU_est': x0[5]
+    }]
+
+    for _, row in df_wls.iloc[1:].iterrows():
         z = np.array([row['E'], row['N'], row['U']])
         x_est, P_est = kf.step(z)
-        
+
         kf_results.append({
             't': row['t'],
             'E_est': x_est[0], 'N_est': x_est[1], 'U_est': x_est[2],
             'vE_est': x_est[3], 'vN_est': x_est[4], 'vU_est': x_est[5]
         })
-        
+
     return pd.DataFrame(kf_results)
 
 def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: TrajectoryConfig, sigma_a: float = 1.0) -> pd.DataFrame:
-    sigma_cb = 0.5 
-    sigma_cd = 0.05 
+    sigma_cb = 0.5
+    sigma_cd = 0.05
 
     row0 = df_wls.iloc[0]
     row1 = df_wls.iloc[1]
     init_coords = row0
     init_speed = (row1[['X', 'Y', 'Z']] - row0[['X', 'Y', 'Z']]) / (row1['t'] - row0['t'])
     x0 = np.array([
-        init_coords['X'], init_coords['Y'], init_coords['Z'], 
-        init_speed['X'], init_speed['Y'], init_speed['Z'], 
-        row0['cb'], 0.0 
+        init_coords['X'], init_coords['Y'], init_coords['Z'],
+        init_speed['X'], init_speed['Y'], init_speed['Z'],
+        row0['cb'], 0.0
     ])
 
-    P0 = np.eye(8) * 100.0 
+    P0 = np.eye(8) * 100.0
 
     ekf = ExtendedKalmanFilter(
         dt=config.dt_gnss,
@@ -181,11 +186,27 @@ def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: Tra
         x0=x0, P0=P0
     )
 
-    ekf_results = []
-    for t in df_wls['t'].values:
+    lat, lon = config.ref_lat, config.ref_lon
+    R_ecef2enu = np.array([
+        [-np.sin(lon), np.cos(lon), 0],
+        [-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)],
+        [ np.cos(lat)*np.cos(lon),  np.cos(lat)*np.sin(lon), np.sin(lat)]
+    ])
+
+    x_est0 = ekf.x.flatten()
+    E0, N0, U0 = ecef_to_enu(x_est0[0], x_est0[1], x_est0[2], config.ref_lat, config.ref_lon, config.ref_alt)
+    v_enu0 = R_ecef2enu @ np.array([x_est0[3], x_est0[4], x_est0[5]])
+
+    ekf_results = [{
+        't': df_wls.iloc[0]['t'],
+        'E_est': E0, 'N_est': N0, 'U_est': U0,
+        'vE_est': v_enu0[0], 'vN_est': v_enu0[1], 'vU_est': v_enu0[2]
+    }]
+
+    for _, wls_row in df_wls.iloc[1:].iterrows():
+        t = wls_row['t']
         ekf.predict_step()
 
-        wls_row = df_wls[df_wls['t'] == t].iloc[0]
         x_wls = np.array([wls_row['X'], wls_row['Y'], wls_row['Z'], wls_row['cb']])
         P_wls = np.diag([wls_row['P00'], wls_row['P11'], wls_row['P22'], wls_row['P33']])
         ekf.update_wls(x_wls, P_wls)
@@ -199,13 +220,6 @@ def run_extended_gnss_kf(df_raw: pd.DataFrame, df_wls: pd.DataFrame, config: Tra
 
         x_est = ekf.x.flatten()
         E, N, U = ecef_to_enu(x_est[0], x_est[1], x_est[2], config.ref_lat, config.ref_lon, config.ref_alt)
-
-        lat, lon = config.ref_lat, config.ref_lon
-        R_ecef2enu = np.array([
-            [-np.sin(lon),              np.cos(lon),             0],
-            [-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)],
-            [ np.cos(lat)*np.cos(lon),  np.cos(lat)*np.sin(lon), np.sin(lat)]
-        ])
         v_ecef = np.array([x_est[3], x_est[4], x_est[5]])
         v_enu = R_ecef2enu @ v_ecef
 
@@ -266,8 +280,13 @@ def run_lab01(df_true, df_meas, config):
                 P0=P0
             )
 
-            kf_results = []
-            for _, row in df_meas.iterrows():
+            kf_results = [{
+                't': df_meas.iloc[0]['t'],
+                'E_est': x0[0], 'N_est': x0[1], 'U_est': x0[2],
+                'vE_est': x0[3], 'vN_est': x0[4], 'vU_est': x0[5]
+            }]
+
+            for _, row in df_meas.iloc[1:].iterrows():
                 z = np.array([row['E'], row['N'], row['U']])
                 x_est, P_est = kf.step(z)
                 kf_results.append({
@@ -275,7 +294,7 @@ def run_lab01(df_true, df_meas, config):
                     'E_est': x_est[0], 'N_est': x_est[1], 'U_est': x_est[2],
                     'vE_est': x_est[3], 'vN_est': x_est[4], 'vU_est': x_est[5]
                 })
-
+            
             df_kf = pd.DataFrame(kf_results)
             metrics = calculate_rmse(df_true_renamed, df_kf)
             if metrics['pos_rmse_3d'] < best_rmse:
@@ -304,7 +323,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     #show_satellite_positions(df_true, config)
     sat_positions = df_raw[['sat_X', 'sat_Y', 'sat_Z']][df_raw['t'] == 0.0].values
     rec_position = df_true[['X_ecef', 'Y_ecef', 'Z_ecef']].values[0]
-    plot_earth_and_satellites(sat_positions, rec_position)
+    #plot_earth_and_satellites(sat_positions, rec_position)
 
     # --- Шаг 0: RTKLIB ---
     df_rtklib = None
@@ -329,7 +348,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     print(f" [WLS] RMSE Позиции (3D): {metrics_wls['pos_rmse_3d']:.3f} м")
     print(f" [WLS] Средний HDOP: {df_wls['HDOP'].mean():.2f}, VDOP: {df_wls['VDOP'].mean():.2f}")
     
-    plot_wls_results(df_true, df_wls)
+    #plot_wls_results(df_true, df_wls)
     
     # --- Шаг 2: Линейный ФК ---
     print("\n [Linear KF] Подбор параметра sigma_a (доверие модели):")
@@ -346,7 +365,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
             best_rmse = met['pos_rmse_3d']
             best_df_kf_lin = df_kf_linear
     
-    plot_kf_comparison(df_true, df_wls, best_df_kf_lin, title_suffix="(Линейный ФК по МНК)")
+    #plot_kf_comparison(df_true, df_wls, best_df_kf_lin, title_suffix="(Линейный ФК по МНК)")
     
     # --- Шаг 3: Расширенный ФК с перебором параметров ---
     print("\n [Extended KF] Подбор параметра sigma_a (доверие модели):")
@@ -558,7 +577,7 @@ if __name__ == "__main__":
 
     #plot_results(df_imu_clean, df_gnss_noisy)
     #run_lab01(df_true, df_gnss_noisy, config)
-    run_lab02(df_gnss_raw, df_true, config)
+    run_lab02(df_gnss_signalsim, df_true, config)
     #run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
     # run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
     # run_lab04()
