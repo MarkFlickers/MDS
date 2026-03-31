@@ -11,7 +11,7 @@ WGS_F_GTR = -4.442807633e-10	# factor of general theory of relativity
 @dataclass
 class WlsConfig:
     max_iter: int = 10      # Максимальное число итераций
-    tol: float = 1e-3       # Критерий остановки (м)
+    tol: float = 1e-6       # Критерий остановки (м)
     sigma_pr: float = 3.0   # СКО псевдодальности в зените (м)
 
 def week_time_rounding(time):
