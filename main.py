@@ -320,10 +320,9 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
         'vE': 'vE_true', 'vN': 'vN_true', 'vU': 'vU_true'
     })
     
-    #show_satellite_positions(df_true, config)
     sat_positions = df_raw[['sat_X', 'sat_Y', 'sat_Z']][df_raw['t'] == 0.0].values
     rec_position = df_true[['X_ecef', 'Y_ecef', 'Z_ecef']].values[0]
-    #plot_earth_and_satellites(sat_positions, rec_position)
+    plot_earth_and_satellites(sat_positions, rec_position)
 
     # --- Шаг 0: RTKLIB ---
     df_rtklib = None
@@ -348,7 +347,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
     print(f" [WLS] RMSE Позиции (3D): {metrics_wls['pos_rmse_3d']:.3f} м")
     print(f" [WLS] Средний HDOP: {df_wls['HDOP'].mean():.2f}, VDOP: {df_wls['VDOP'].mean():.2f}")
     
-    #plot_wls_results(df_true, df_wls)
+    plot_wls_results(df_true, df_wls)
     
     # --- Шаг 2: Линейный ФК ---
     print("\n [Linear KF] Подбор параметра sigma_a (доверие модели):")
@@ -365,7 +364,7 @@ def run_lab02(df_raw: pd.DataFrame, df_true: pd.DataFrame, config: TrajectoryCon
             best_rmse = met['pos_rmse_3d']
             best_df_kf_lin = df_kf_linear
     
-    #plot_kf_comparison(df_true, df_wls, best_df_kf_lin, title_suffix="(Линейный ФК по МНК)")
+    plot_kf_comparison(df_true, df_wls, best_df_kf_lin, title_suffix="(Линейный ФК по МНК)")
     
     # --- Шаг 3: Расширенный ФК с перебором параметров ---
     print("\n [Extended KF] Подбор параметра sigma_a (доверие модели):")
@@ -578,6 +577,6 @@ if __name__ == "__main__":
     #plot_results(df_imu_clean, df_gnss_noisy)
     #run_lab01(df_true, df_gnss_noisy, config)
     run_lab02(df_gnss_signalsim, df_true, config)
-    #run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
+    #run_lab03(df_imu_clean, df_gnss_signalsim, df_imu_noisy, config, gnss_pos_sigma_grid=[7.0], accel_bias_rw_sigma_grid=[1e-5], gyro_bias_rw_sigma_grid=[1e-5],)
     # run_lab03(df_imu_clean, df_gnss_noisy, df_imu_noisy, config)
     # run_lab04()
