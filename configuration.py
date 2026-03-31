@@ -52,8 +52,8 @@ class TrajectoryConfig:
     # Спутники
     num_satellites: int = 36            # Количество видимых спутников
     satellite_radius: float = 26600000.0 # Радиус орбиты GPS (м)
-    raw_pr_sigma: float = 2.0          # СКО шума псевдодальности (м)
-    raw_doppler_sigma: float = 0.1     # СКО шума доплера (м/с)
+    raw_pr_sigma: float = 5.0          # СКО шума псевдодальности (м)
+    raw_doppler_sigma: float = 3.0    # СКО шума доплера (м/с)
 
 ZERO_A = np.array([0.0, 0.0, 0.0])
 
