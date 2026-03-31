@@ -243,7 +243,7 @@ def generate_all_data():
     df_gnss_raw = simulate_gnss_raw(df_gnss_clean, config)
     save_trajectories(df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw)
     save_metadata(config)
-    df_gnss_signalsim = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0)
+    df_gnss_signalsim = pd.read_csv("output/SignalSimTrajectory.obs.csv", header=0, float_precision='round_trip')
     lam = df_gnss_signalsim['sv_id'].astype(str).str[0].map(get_wave_length)
     df_gnss_signalsim['doppler'] = -lam * df_gnss_signalsim['doppler'] + c_light * df_gnss_signalsim['af1']
     return config, df_imu_clean, df_imu_noisy, df_gnss_clean, df_gnss_noisy, df_gnss_raw, df_gnss_signalsim
